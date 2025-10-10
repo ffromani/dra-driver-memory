@@ -54,6 +54,12 @@ const (
 	driverName = "dra.memory"
 )
 
+type SysinformerFunc func() (*ghwtopology.Info, error)
+
+func (f SysinformerFunc) Topology() (*ghwtopology.Info, error) {
+	return f()
+}
+
 func main() {
 	var ready atomic.Bool
 	setupLogger := stdr.New(log.New(os.Stderr, "", log.Lshortfile))
@@ -138,6 +144,9 @@ func main() {
 		NodeName:   nodeName,
 		Clientset:  clientset,
 		Logger:     makeLogger(setupLogger),
+		Sysinform: SysinformerFunc(func() (*ghwtopology.Info, error) {
+			return ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+		}),
 	}
 	dramem, err := driver.Start(ctx, driverEnv)
 	if err != nil {

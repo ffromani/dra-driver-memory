@@ -31,6 +31,8 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
+
+	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 )
 
 const (
@@ -46,12 +48,19 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName string
-	nodeName   string
-	kubeClient kubernetes.Interface
-	draPlugin  KubeletPlugin
-	nriPlugin  stub.Stub
-	logger     logr.Logger
+	driverName           string
+	nodeName             string
+	kubeClient           kubernetes.Interface
+	draPlugin            KubeletPlugin
+	nriPlugin            stub.Stub
+	cdiMgr               *cdi.Manager
+	logger               logr.Logger
+	sysinformer          Sysinformer
+	deviceNameToNUMANode map[string]int64
+}
+
+type Sysinformer interface {
+	Topology() (*ghwtopology.Info, error)
 }
 
 type Environment struct {
@@ -59,16 +68,18 @@ type Environment struct {
 	DriverName string
 	NodeName   string
 	Clientset  kubernetes.Interface
-	Sysinfo    *ghwtopology.Info
+	Sysinform  Sysinformer
 }
 
 // Start creates and starts a new MemoryDriver.
 func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	plugin := &MemoryDriver{
-		driverName: env.DriverName,
-		nodeName:   env.NodeName,
-		kubeClient: env.Clientset,
-		logger:     env.Logger.WithName(env.DriverName),
+		driverName:           env.DriverName,
+		nodeName:             env.NodeName,
+		kubeClient:           env.Clientset,
+		logger:               env.Logger.WithName(env.DriverName),
+		sysinformer:          env.Sysinform,
+		deviceNameToNUMANode: make(map[string]int64),
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)
@@ -81,13 +92,13 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		kubeletplugin.NodeName(env.NodeName),
 		kubeletplugin.KubeClient(env.Clientset),
 	}
-	d, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
+	draDrv, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("start kubelet plugin: %w", err)
 	}
-	plugin.draPlugin = d
+	plugin.draPlugin = draDrv
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(context.Context) (bool, error) {
-		status := d.RegistrationStatus()
+		status := draDrv.RegistrationStatus()
 		if status == nil {
 			return false, nil
 		}
@@ -96,6 +107,12 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cdiMgr, err := cdi.NewManager(env.DriverName, env.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CDI manager: %w", err)
+	}
+	plugin.cdiMgr = cdiMgr
 
 	// register the NRI plugin
 	nriOpts := []stub.Option{
