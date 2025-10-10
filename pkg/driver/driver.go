@@ -46,12 +46,17 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName string
-	nodeName   string
-	kubeClient kubernetes.Interface
-	draPlugin  KubeletPlugin
-	nriPlugin  stub.Stub
-	logger     logr.Logger
+	driverName  string
+	nodeName    string
+	kubeClient  kubernetes.Interface
+	draPlugin   KubeletPlugin
+	nriPlugin   stub.Stub
+	logger      logr.Logger
+	sysinformer Sysinformer
+}
+
+type Sysinformer interface {
+	Topology() (*ghwtopology.Info, error)
 }
 
 type Environment struct {
@@ -59,16 +64,17 @@ type Environment struct {
 	DriverName string
 	NodeName   string
 	Clientset  kubernetes.Interface
-	Sysinfo    *ghwtopology.Info
+	Sysinform  Sysinformer
 }
 
 // Start creates and starts a new MemoryDriver.
 func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	plugin := &MemoryDriver{
-		driverName: env.DriverName,
-		nodeName:   env.NodeName,
-		kubeClient: env.Clientset,
-		logger:     env.Logger.WithName(env.DriverName),
+		driverName:  env.DriverName,
+		nodeName:    env.NodeName,
+		kubeClient:  env.Clientset,
+		logger:      env.Logger.WithName(env.DriverName),
+		sysinformer: env.Sysinform,
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)

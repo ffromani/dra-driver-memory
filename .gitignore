@@ -33,3 +33,6 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# local ignores
+hack/ci/install-ci.yaml
