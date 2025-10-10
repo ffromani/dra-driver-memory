@@ -17,27 +17,34 @@ limitations under the License.
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	ghwopt "github.com/jaypipes/ghw/pkg/option"
+	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"golang.org/x/sys/unix"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	nodeutil "k8s.io/component-helpers/node/util"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
+	"sigs.k8s.io/yaml"
 
 	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
@@ -48,13 +55,23 @@ const (
 )
 
 func main() {
-	var params Params
 	var ready atomic.Bool
 	setupLogger := stdr.New(log.New(os.Stderr, "", log.Lshortfile))
 
+	params := DefaultParams()
 	params.InitFlags()
 	params.ParseFlags()
 	params.DumpFlags(setupLogger)
+
+	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+	if err != nil {
+		setupLogger.Error(err, "cannot determine system topology")
+		os.Exit(1)
+	}
+	if params.InspectOnly {
+		dumpMemoryInfo(sysinfo, setupLogger)
+		os.Exit(0)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +95,6 @@ func main() {
 		_ = server.ListenAndServe()
 	}()
 
-	var err error
 	var config *rest.Config
 	if params.Kubeconfig != "" {
 		config, err = clientcmd.BuildConfigFromFlags("", params.Kubeconfig)
@@ -86,7 +102,7 @@ func main() {
 		config, err = rest.InClusterConfig()
 	}
 	if err != nil {
-		setupLogger.Error(err, "can not create client-go configuration")
+		setupLogger.Error(err, "cannot create client-go configuration")
 		os.Exit(1)
 	}
 
@@ -97,7 +113,7 @@ func main() {
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		setupLogger.Error(err, "can not create client-go client")
+		setupLogger.Error(err, "cannot create client-go client")
 		os.Exit(2)
 	}
 
@@ -117,13 +133,16 @@ func main() {
 	}()
 	signal.Notify(signalCh, os.Interrupt, unix.SIGINT)
 
-	driverConfig := &driver.Config{
+	driverEnv := driver.Environment{
 		DriverName: driverName,
 		NodeName:   nodeName,
+		Clientset:  clientset,
+		Logger:     makeLogger(setupLogger),
 	}
-	dramem, err := driver.Start(ctx, clientset, makeLogger(setupLogger), driverConfig)
+	dramem, err := driver.Start(ctx, driverEnv)
 	if err != nil {
 		setupLogger.Error(err, "driver failed to start")
+		os.Exit(4)
 	}
 	defer dramem.Stop()
 	ready.Store(true)
@@ -157,12 +176,22 @@ type Params struct {
 	HostnameOverride string
 	Kubeconfig       string
 	BindAddress      string
+	SysRoot          string
+	InspectOnly      bool
+}
+
+func DefaultParams() Params {
+	return Params{
+		SysRoot: "/",
+	}
 }
 
 func (par *Params) InitFlags() {
 	klog.InitFlags(nil)
-	flag.StringVar(&par.Kubeconfig, "kubeconfig", par.Kubeconfig, "absolute path to the kubeconfig file")
+	flag.StringVar(&par.Kubeconfig, "kubeconfig", par.Kubeconfig, "Absolute path to the kubeconfig file.")
 	flag.StringVar(&par.HostnameOverride, "hostname-override", par.HostnameOverride, "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
+	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
+	flag.BoolVar(&par.InspectOnly, "inspect", par.InspectOnly, "inspect machine properties and exit.")
 }
 
 func (par *Params) ParseFlags() {
@@ -185,4 +214,20 @@ func makeLogger(setupLogger logr.Logger) logr.Logger {
 	}
 	config := textlogger.NewConfig(textlogger.Verbosity(int(lev)))
 	return textlogger.NewLogger(config)
+}
+
+func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
+	for _, node := range sysinfo.Nodes {
+		data, err := yaml.Marshal(node.Memory)
+		if err != nil {
+			logger.Error(err, "marshalling data for node %d", node.ID)
+		}
+		// re-indent
+		var lines []string
+		sc := bufio.NewScanner(strings.NewReader(string(data)))
+		for sc.Scan() {
+			lines = append(lines, sc.Text())
+		}
+		fmt.Printf("* node=%d:\n  %s\n", node.ID, strings.Join(lines, "\n  "))
+	}
 }

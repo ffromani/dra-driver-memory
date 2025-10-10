@@ -25,6 +25,7 @@ import (
 
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/go-logr/logr"
+	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
@@ -44,7 +45,6 @@ type KubeletPlugin interface {
 	Stop()
 }
 
-// MemoryDriver is the structure that holds all the driver runtime information.
 type MemoryDriver struct {
 	driverName string
 	nodeName   string
@@ -54,30 +54,32 @@ type MemoryDriver struct {
 	logger     logr.Logger
 }
 
-// Config is the configuration for the MemoryDriver.
-type Config struct {
+type Environment struct {
+	Logger     logr.Logger
 	DriverName string
 	NodeName   string
+	Clientset  kubernetes.Interface
+	Sysinfo    *ghwtopology.Info
 }
 
 // Start creates and starts a new MemoryDriver.
-func Start(ctx context.Context, clientset kubernetes.Interface, logger logr.Logger, config *Config) (*MemoryDriver, error) {
+func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	plugin := &MemoryDriver{
-		driverName: config.DriverName,
-		nodeName:   config.NodeName,
-		kubeClient: clientset,
-		logger:     logger.WithName(config.DriverName),
+		driverName: env.DriverName,
+		nodeName:   env.NodeName,
+		kubeClient: env.Clientset,
+		logger:     env.Logger.WithName(env.DriverName),
 	}
 
-	driverPluginPath := filepath.Join(kubeletPluginPath, config.DriverName)
+	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)
 	if err := os.MkdirAll(driverPluginPath, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create plugin path %s: %w", driverPluginPath, err)
 	}
 
 	kubeletOpts := []kubeletplugin.Option{
-		kubeletplugin.DriverName(config.DriverName),
-		kubeletplugin.NodeName(config.NodeName),
-		kubeletplugin.KubeClient(clientset),
+		kubeletplugin.DriverName(env.DriverName),
+		kubeletplugin.NodeName(env.NodeName),
+		kubeletplugin.KubeClient(env.Clientset),
 	}
 	d, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
 	if err != nil {
@@ -97,12 +99,12 @@ func Start(ctx context.Context, clientset kubernetes.Interface, logger logr.Logg
 
 	// register the NRI plugin
 	nriOpts := []stub.Option{
-		stub.WithPluginName(config.DriverName),
+		stub.WithPluginName(env.DriverName),
 		stub.WithPluginIdx("00"),
 		// https://github.com/containerd/nri/pull/173
 		// Otherwise it silently exits the program
 		stub.WithOnClose(func() {
-			klog.Infof("%s NRI plugin closed", config.DriverName)
+			klog.Infof("%s NRI plugin closed", env.DriverName)
 		}),
 	}
 	stub, err := stub.New(plugin, nriOpts...)
