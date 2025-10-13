@@ -1,0 +1,206 @@
+# Copyright 2025 The Kubernetes Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dramemory
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceslices
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims
+      - deviceclasses
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims/status
+    verbs:
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dramemory
+  namespace: kube-system
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dramemory
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dramemory
+subjects:
+  - kind: ServiceAccount
+    name: dramemory
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dramemory
+  namespace: kube-system
+  labels:
+    tier: node
+    app: dramemory
+    k8s-app: dramemory
+spec:
+  selector:
+    matchLabels:
+      app: dramemory
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: dramemory
+        k8s-app: dramemory
+        build: devel
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      serviceAccountName: dramemory
+      hostPID: true
+      initContainers:
+        - name: enable-nri-and-cdi
+          image: busybox:stable
+          volumeMounts:
+            - mountPath: /etc
+              name: etc
+          securityContext:
+            privileged: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -o errexit
+              set -o pipefail
+              set -o nounset
+              set -x
+              CONFIG_CHANGED=false
+              CONTAINERD_CONFIG_PATH="/etc/containerd/config.toml"
+              # --- Enable CDI ---
+              if grep -q '^\s*enable_cdi\s*=\s*true' "$CONTAINERD_CONFIG_PATH"; then
+                echo "containerd config already has CDI enabled; taking no action"
+              else
+                echo "containerd config does not have CDI enabled, thus enabling it";
+                sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\]/a \  enable_cdi = true' "$CONTAINERD_CONFIG_PATH"
+                CONFIG_CHANGED=true
+              fi
+              # --- CDI Spec Dirs Configuration ---
+              if grep -q '^\s*cdi_spec_dirs\s*=' "$CONTAINERD_CONFIG_PATH"; then
+                echo "containerd config already configures cdi_spec_dirs; taking no action"
+              else
+                echo "containerd config does not configure cdi_spec_dirs, thus setting it";
+                sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\]/a \  cdi_spec_dirs = ["/etc/cdi", "/var/run/cdi"]' "$CONTAINERD_CONFIG_PATH"
+                CONFIG_CHANGED=true
+              fi
+              # --- Enable NRI ---
+              if grep -q "io.containerd.nri.v1.nri" "$CONTAINERD_CONFIG_PATH"
+              then
+                 echo "containerd config contains NRI reference already; taking no action"
+              else
+                 echo "containerd config does not mention NRI, thus enabling it";
+                 printf '%s\n' "[plugins.\"io.containerd.nri.v1.nri\"]" "  disable = false" "  disable_connections = false" "  plugin_config_path = \"/etc/nri/conf.d\"" "  plugin_path = \"/opt/nri/plugins\"" "  plugin_registration_timeout = \"5s\"" "  plugin_request_timeout = \"5s\"" "  socket_path = \"/var/run/nri/nri.sock\"" >> "$CONTAINERD_CONFIG_PATH"
+                 CONFIG_CHANGED=true
+              fi
+              if [ "$CONFIG_CHANGED" = true ]; then
+                echo "restarting containerd"
+                nsenter -t 1 -m -u -i -n -p -- systemctl restart containerd
+              fi
+      containers:
+        - name: dramemory
+          args:
+            - /dramemory
+            - --v=6
+          image: quay.io/ffromani/dramem:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "100m"
+              memory: "50Mi"
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN", "SYS_ADMIN"]
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/plugins
+            - name: plugin-registry
+              mountPath: /var/lib/kubelet/plugins_registry
+            - name: nri-plugin
+              mountPath: /var/run/nri
+            - name: cdi-dir
+              mountPath: /var/run/cdi
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/plugins
+        - name: plugin-registry
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry
+        - name: nri-plugin
+          hostPath:
+            path: /var/run/nri
+        - name: netns
+          hostPath:
+            path: /var/run/netns
+        - name: infiniband
+          hostPath:
+            path: /dev/infiniband
+        - name: etc
+          hostPath:
+            path: /etc
+        - name: cdi-dir
+          hostPath:
+            path: /var/run/cdi
+            type: DirectoryOrCreate
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: dra.memory
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "dra.memory"

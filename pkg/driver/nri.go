@@ -20,47 +20,70 @@ import (
 	"context"
 
 	"github.com/containerd/nri/pkg/api"
+	"github.com/go-logr/logr"
 
-	"k8s.io/klog/v2"
+	"k8s.io/utils/cpuset"
 )
 
-func (cp *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
-	klog.Infof("Synchronized state with the runtime (%d pods, %d containers)...",
-		len(pods), len(containers))
+func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
 	return nil, nil
 }
 
-func (cp *MemoryDriver) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("CreateContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
+
+	claimAllocations, err := parseDRAEnvToClaimAllocations(lh, ctr.Env)
+	if err != nil {
+		lh.Error(err, "parsing DRA env for container")
+	}
+
+	if len(claimAllocations) == 0 {
+		lh.V(4).Info("No memory pinning for container")
+		return adjust, updates, nil
+	}
+
+	var numaNodes cpuset.CPUSet
+	for _, allocNodes := range claimAllocations {
+		numaNodes = numaNodes.Union(allocNodes)
+	}
+
+	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
+	adjust.SetLinuxCPUSetMems(numaNodes.String())
+
 	return adjust, updates, nil
 }
 
-func (cp *MemoryDriver) StopContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) ([]*api.ContainerUpdate, error) {
-	klog.Infof("StopContainer Pod:%s/%s PodUID:%s Container:%s ContainerID:%s", pod.Namespace, pod.Name, pod.Uid, ctr.Name, ctr.Id)
+func (mdrv *MemoryDriver) StopContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) ([]*api.ContainerUpdate, error) {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("StopContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	return nil, nil
 }
 
-// RemoveContainer handles container removal requests from the NRI.
-func (cp *MemoryDriver) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	klog.Infof("RemoveContainer Pod:%s/%s PodUID:%s Container:%s ContainerID:%s", pod.Namespace, pod.Name, pod.Uid, ctr.Name, ctr.Id)
+func (mdrv *MemoryDriver) RemoveContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) error {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("RemoveContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	return nil
 }
 
-// RunPodSandbox handles pod sandbox creation requests from the NRI.
-func (cp *MemoryDriver) RunPodSandbox(_ context.Context, pod *api.PodSandbox) error {
-	klog.Infof("RunPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("RunPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	return nil
 }
 
-// StopPodSandbox handles pod sandbox stop requests from the NRI.
-func (cp *MemoryDriver) StopPodSandbox(_ context.Context, pod *api.PodSandbox) error {
-	klog.Infof("StopPodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+func (mdrv *MemoryDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("StopPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	return nil
 }
 
-// RemovePodSandbox handles pod sandbox removal requests from the NRI.
-func (cp *MemoryDriver) RemovePodSandbox(_ context.Context, pod *api.PodSandbox) error {
-	klog.Infof("RemovePodSandbox Pod %s/%s UID %s", pod.Namespace, pod.Name, pod.Uid)
+func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	lh, _ := logr.FromContext(ctx)
+	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	return nil
 }

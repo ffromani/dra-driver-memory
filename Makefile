@@ -40,7 +40,7 @@ SHELL = /usr/bin/env bash -o pipefail
 default: build ## Default builds
 
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-23s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-27s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 build: build-dramemory ## build all the binaries
 
@@ -63,7 +63,7 @@ $(OUT_DIR):  ## creates the output directory (used internally)
 CLUSTER_NAME=dra-driver-memory
 STAGING_REPO_NAME=dra-driver-memory
 IMAGE_NAME=dra-driver-memory
-# podman image registry, default to upstream
+# docker image registry, default to upstream
 REGISTRY := quay.io/fromani
 # this is an intentionally non-existent registry to be used only by local CI using the local image loading
 REGISTRY_CI := dev.kind.local/ci
@@ -76,7 +76,6 @@ ifneq ($(shell git status --porcelain),)
 endif
 TAG ?= $(GIT_VERSION)
 # the full image tag
-IMAGE_LATEST?=$(STAGING_IMAGE_NAME):latest
 IMAGE := ${STAGING_IMAGE_NAME}:${TAG}
 IMAGE_TESTING := "${TESTING_IMAGE_NAME}:${TAG}"
 IMAGE_CI := ${REGISTRY_CI}/${IMAGE_NAME}:${TAG}
@@ -86,44 +85,64 @@ PLATFORMS?=linux/amd64
 
 # required to enable buildx
 export DOCKER_CLI_EXPERIMENTAL=enabled
-image: ## podman build load
-	podman build . -t ${STAGING_IMAGE_NAME} --load
+image: ## docker build load
+	docker build . -t ${STAGING_IMAGE_NAME} --load
 
 build-image: ## build image
-	podman build . \
+	docker build . \
 		--platform="${PLATFORMS}" \
 		--tag="${IMAGE}" \
-		--tag="${IMAGE_LATEST}" \
 		--tag="${IMAGE_CI}" \
 		--load
 
 # no need to push the test image
 # never push the CI image! it intentionally refers to a non-existing registry
 push-image: build-image ## build and push image
-	podman push ${IMAGE}
-	podman push ${IMAGE_LATEST}
+	docker push ${IMAGE}
 
 kind-cluster:  ## create kind cluster
 	kind create cluster --name ${CLUSTER_NAME} --config hack/kind.yaml
 
 kind-load-image: build-image  ## load the current container image into kind
-	kind load podman-image ${IMAGE} ${IMAGE_LATEST} --name ${CLUSTER_NAME}
-
-kind-uninstall-dra-memory: ## remove cpu dra from kind cluster
-	kubectl delete -f install.yaml || true
-
-kind-install-dra-memory: kind-uninstall-dra-memory build-image kind-load-image ## install on cluster
-	kubectl apply -f install.yaml
+	kind load docker-image ${IMAGE} --name ${CLUSTER_NAME}
 
 delete-kind-cluster: ## delete kind cluster
 	kind delete cluster --name ${CLUSTER_NAME}
 
-ci-kind-setup: ci-manifests build-image build-test-image ## setup a CI cluster from scratch
+ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 	kind create cluster --name ${CLUSTER_NAME} --config hack/ci/kind-ci.yaml
 	kubectl label node ${CLUSTER_NAME}-worker node-role.kubernetes.io/worker=''
-	kind load podman-image --name ${CLUSTER_NAME} ${IMAGE_CI} ${IMAGE_TEST}
+	kind load docker-image --name ${CLUSTER_NAME} ${IMAGE_CI}
 	kubectl create -f hack/ci/install-ci.yaml
 	hack/ci/wait-resourcelices.sh
 
+ci-kind-teardown:  ## teardown a CI cluster
+	kind delete cluster --name ${CLUSTER_NAME}
+
 lint:  ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...
+
+ci-manifests: hack/ci/install.tmpl.yaml install-yq ## create the CI install manifests
+	@cd hack/ci && ../../bin/yq e -s '(.kind | downcase) + "-" + .metadata.name + ".part.yaml"' ../../hack/ci/install.tmpl.yaml
+	@# need to make kind load docker-image working as expected: see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
+	@bin/yq -i '.spec.template.spec.containers[0].imagePullPolicy = "IfNotPresent"' hack/ci/daemonset-dramemory.part.yaml
+	@bin/yq -i '.spec.template.spec.containers[0].image = "${IMAGE_CI}"' hack/ci/daemonset-dramemory.part.yaml
+	@bin/yq -i '.spec.template.metadata.labels["build"] = "${GIT_VERSION}"' hack/ci/daemonset-dramemory.part.yaml
+	@bin/yq '.' \
+		hack/ci/clusterrole-dramemory.part.yaml \
+		hack/ci/serviceaccount-dramemory.part.yaml \
+		hack/ci/clusterrolebinding-dramemory.part.yaml \
+		hack/ci/daemonset-dramemory.part.yaml \
+		hack/ci/deviceclass-dra.memory.part.yaml \
+		> hack/ci/install-ci.yaml
+	@rm hack/ci/*.part.yaml
+
+# dependencies
+.PHONY:
+install-yq: ## make sure the yq tool is available locally
+	@# TODO: generalize platform/os?
+	@if [ ! -f bin/yq ]; then\
+	       mkdir -p bin;\
+	       curl -L https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_linux_amd64 -o bin/yq;\
+               chmod 0755 bin/yq;\
+	fi
