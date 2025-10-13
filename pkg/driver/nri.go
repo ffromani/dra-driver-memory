@@ -25,6 +25,9 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// NRI is the actuation layer. Once we reach this point, all the allocation decisions
+// are already done and this layer "just" needs to enforce them.
+
 func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
 	lh, _ := logr.FromContext(ctx)
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))

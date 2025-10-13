@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/types"
 	cdiSpec "tags.cncf.io/container-device-interface/specs-go"
 )
 
@@ -201,4 +202,8 @@ func (c *Manager) writeSpecToFile(lh logr.Logger, spec *cdiSpec.Spec) error {
 
 	lh.V(2).Info("Successfully updated and synced CDI spec file")
 	return nil
+}
+
+func MakeDeviceName(uid types.UID) string {
+	return fmt.Sprintf("claim-%s", uid)
 }

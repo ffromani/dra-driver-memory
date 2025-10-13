@@ -21,21 +21,22 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	resourceapi "k8s.io/api/resource/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
-	k8srand "k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/ptr"
 	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
+	"github.com/ffromani/dra-driver-memory/pkg/ghwinfo"
 )
+
+// This is the DRA frontend. Allocation, if and when required, will happen at this layer.
+// The core responsability of this layer is to translate Device Requests into CDI specs,
+// and to manage the latter on the node.
 
 func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 	lh, _ := logr.FromContext(ctx)
@@ -49,11 +50,13 @@ func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 		return
 	}
 
+	slices, deviceNameToNUMANodeMap := ghwinfo.Discover(lh, systopology)
+	mdrv.deviceNameToNUMANode = deviceNameToNUMANodeMap
+
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
-			// All slices are published under the same pool for this node.
 			mdrv.nodeName: {
-				Slices: mdrv.makeResourceSlices(lh, systopology),
+				Slices: slices,
 			},
 		},
 	}
@@ -110,67 +113,6 @@ func (mdrv *MemoryDriver) HandleError(ctx context.Context, err error, msg string
 	lh.Error(err, msg)
 }
 
-func (mdrv *MemoryDriver) makeResourceSlices(lh logr.Logger, systopology *ghwtopology.Info) []resourceslice.Slice {
-	memorySlice := resourceslice.Slice{}
-	hugepageSlice := resourceslice.Slice{}
-	for numaNode, nodeInfo := range systopology.Nodes {
-		if nodeInfo.Memory == nil {
-			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
-			continue
-		}
-		numaNode := int64(numaNode)
-
-		memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
-		memDevice := resourceapi.Device{
-			Name: "memory-" + k8srand.String(6),
-			Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
-				"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
-				"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
-			},
-			Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-				"memory": resourceapi.DeviceCapacity{
-					Value: *memQty,
-				},
-			},
-			AllowMultipleAllocations: ptr.To(true),
-		}
-		memorySlice.Devices = append(memorySlice.Devices, memDevice)
-		mdrv.deviceNameToNUMANode[memDevice.Name] = numaNode
-
-		for sizeInBytes, amounts := range nodeInfo.Memory.HugePageAmountsBySize {
-			hpBasename := hugepageNameBySizeInBytes(sizeInBytes)
-			hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
-			hpDevice := resourceapi.Device{
-				Name: hpBasename + "-" + k8srand.String(6),
-				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-					"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
-					"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
-					"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
-				},
-				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-					"pages": resourceapi.DeviceCapacity{
-						Value: *hpQty,
-					},
-				},
-				AllowMultipleAllocations: ptr.To(true),
-			}
-			hugepageSlice.Devices = append(hugepageSlice.Devices, hpDevice)
-			mdrv.deviceNameToNUMANode[hpDevice.Name] = numaNode
-		}
-	}
-
-	if lh.V(4).Enabled() {
-		for devName, numaNode := range mdrv.deviceNameToNUMANode {
-			lh.V(4).Info("Devices mapping", "device", devName, "NUMANode", numaNode)
-		}
-	}
-	return []resourceslice.Slice{
-		memorySlice,
-		hugepageSlice,
-	}
-}
-
 func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
 	lh, _ := logr.FromContext(ctx)
 	lh = lh.WithName("PrepareResourceClaims").WithValues("claim", klog.KObj(claim))
@@ -200,7 +142,7 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 		return kubeletplugin.PrepareResult{}
 	}
 
-	deviceName := getCDIDeviceName(claim.UID)
+	deviceName := cdi.MakeDeviceName(claim.UID)
 	envVar := fmt.Sprintf("%s_%s=%s", cdi.EnvVarPrefix, claim.UID, numaNodesToString(claimNodes))
 
 	err := mdrv.cdiMgr.AddDevice(lh, deviceName, envVar)
@@ -229,23 +171,5 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 func (mdrv *MemoryDriver) unprepareResourceClaim(ctx context.Context, claim kubeletplugin.NamespacedObject) error {
 	lh, _ := logr.FromContext(ctx)
 	lh = lh.WithName("UnprepareResourceClaims").WithValues("claim", claim.String())
-	return mdrv.cdiMgr.RemoveDevice(lh, getCDIDeviceName(claim.UID))
-}
-
-// TODO: only amd64 supported atm
-// NOTE: need to be a lowercase RFC 1123 label
-func hugepageNameBySizeInBytes(sizeInBytes uint64) string {
-	sizeInKB := sizeInBytes / 1024
-	if sizeInKB == 2048 {
-		return "hugepages-2m"
-	}
-	sizeInMB := sizeInKB / 1024
-	if sizeInMB == 1024 {
-		return "hugepages-1g"
-	}
-	return fmt.Sprintf("hugepages-%dk", sizeInKB) // should never happen
-}
-
-func getCDIDeviceName(uid types.UID) string {
-	return fmt.Sprintf("claim-%s", uid)
+	return mdrv.cdiMgr.RemoveDevice(lh, cdi.MakeDeviceName(claim.UID))
 }

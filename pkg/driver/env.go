@@ -27,6 +27,9 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// This is the internal "communication" layer helpers. DRA and NRI layers communicate
+// through CDI specs and other channels whose code sits here.
+
 func makeDRAEnvFromClaimAllocations(lh logr.Logger, claimUID types.UID, claimNodes sets.Set[int64]) string {
 	return fmt.Sprintf("%s_%s=%s", cdi.EnvVarPrefix, claimUID, numaNodesToString(claimNodes))
 }

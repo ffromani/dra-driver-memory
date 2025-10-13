@@ -35,6 +35,10 @@ import (
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 )
 
+// This is the orchestration layer. All the sub-components (DRA layer, NRI layer, CDI manager...)
+// are coordinated here. Besides glue code, no logic should be present here.
+// Push any nontrivial logic into a subcomponent.
+
 const (
 	kubeletPluginPath = "/var/lib/kubelet/plugins"
 	// maxAttempts indicates the number of times the driver will try to recover itself before failing
