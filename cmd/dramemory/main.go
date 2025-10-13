@@ -212,14 +212,13 @@ func (par *Params) DumpFlags(lh logr.Logger) {
 	flag.VisitAll(func(f *flag.Flag) {
 		lh.Info("FLAG", f.Name, f.Value)
 	})
-
 }
 
 func makeLogger(setupLogger logr.Logger) logr.Logger {
 	lev, err := kloglevel.Get()
 	if err != nil {
 		setupLogger.Error(err, "cannot get verbosity, going dark")
-		return logr.Discard() // TODO: fail
+		return logr.Discard() // TODO: fail?
 	}
 	config := textlogger.NewConfig(textlogger.Verbosity(int(lev)))
 	return textlogger.NewLogger(config)
@@ -231,7 +230,7 @@ func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
 		if err != nil {
 			logger.Error(err, "marshalling data for node %d", node.ID)
 		}
-		// re-indent
+		// re-indent, bruteforce way
 		var lines []string
 		sc := bufio.NewScanner(strings.NewReader(string(data)))
 		for sc.Scan() {
