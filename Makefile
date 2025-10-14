@@ -23,7 +23,7 @@ ARCH=$(shell go env GOARCH)
 ## versions
 YQ_VERSION ?= 4.47.1
 # matches golang 1.24.z
-GOLANGCI_LINT_VERSION ?= 2.3.0
+GOLANGCI_LINT_VERSION ?= 2.4.0
 # paths
 YQ = $(OUT_DIR)/yq
 GOLANGCI_LINT = $(OUT_DIR)/golangci-lint
@@ -63,7 +63,7 @@ $(OUT_DIR):  ## creates the output directory (used internally)
 CLUSTER_NAME=dra-driver-memory
 STAGING_REPO_NAME=dra-driver-memory
 IMAGE_NAME=dra-driver-memory
-# docker image registry, default to upstream
+# container image registry, default to upstream
 REGISTRY := quay.io/fromani
 # this is an intentionally non-existent registry to be used only by local CI using the local image loading
 REGISTRY_CI := dev.kind.local/ci
@@ -83,13 +83,10 @@ IMAGE_TEST := ${REGISTRY_CI}/${IMAGE_NAME}-test:${TAG}
 # target platform(s)
 PLATFORMS?=linux/amd64
 
-# required to enable buildx
-export DOCKER_CLI_EXPERIMENTAL=enabled
-image: ## docker build load
-	docker build . -t ${STAGING_IMAGE_NAME} --load
+CONTAINER_ENGINE?=docker
 
 build-image: ## build image
-	docker build . \
+	${CONTAINER_ENGINE} build . \
 		--platform="${PLATFORMS}" \
 		--tag="${IMAGE}" \
 		--tag="${IMAGE_CI}" \
@@ -98,7 +95,7 @@ build-image: ## build image
 # no need to push the test image
 # never push the CI image! it intentionally refers to a non-existing registry
 push-image: build-image ## build and push image
-	docker push ${IMAGE}
+	${CONTAINER_ENGINE} push ${IMAGE}
 
 kind-cluster:  ## create kind cluster
 	kind create cluster --name ${CLUSTER_NAME} --config hack/kind.yaml
@@ -121,8 +118,9 @@ ci-kind-teardown:  ## teardown a CI cluster
 
 lint:  ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...
+$(GOLANGCI_LINT): dep-install-golangci-lint
 
-ci-manifests: hack/ci/install.tmpl.yaml install-yq ## create the CI install manifests
+ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install manifests
 	@cd hack/ci && ../../bin/yq e -s '(.kind | downcase) + "-" + .metadata.name + ".part.yaml"' ../../hack/ci/install.tmpl.yaml
 	@# need to make kind load docker-image working as expected: see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
 	@bin/yq -i '.spec.template.spec.containers[0].imagePullPolicy = "IfNotPresent"' hack/ci/daemonset-dramemory.part.yaml
@@ -139,10 +137,24 @@ ci-manifests: hack/ci/install.tmpl.yaml install-yq ## create the CI install mani
 
 # dependencies
 .PHONY:
-install-yq: ## make sure the yq tool is available locally
+dep-install-yq: ## make sure the yq tool is available locally
 	@# TODO: generalize platform/os?
 	@if [ ! -f bin/yq ]; then\
 	       mkdir -p bin;\
 	       curl -L https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_linux_amd64 -o bin/yq;\
                chmod 0755 bin/yq;\
 	fi
+
+.PHONY: dep-install-golangci-lint
+dep-install-golangci-lint: $(OUT_DIR)  ## Download golangci-lint locally if necessary, or reuse the system binary
+	@[ ! -f $(OUT_DIR)/golangci-lint ] && { \
+		command -v golangci-lint >/dev/null 2>&1 && {\
+			ln -sf $(shell command -v golangci-lint ) $(OUT_DIR) ;\
+			echo "reusing system golangci-lint" ;\
+		} || { \
+			curl -sSL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH).tar.gz" -o $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH).tar.gz ;\
+			tar -x -C $(OUT_DIR) -f $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH).tar.gz ;\
+			ln -sf $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH)/golangci-lint $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION) ;\
+			ln -sf $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION) $(GOLANGCI_LINT) ;\
+		}; \
+	} || true
