@@ -166,7 +166,7 @@ func (c *Manager) readSpecFromFile(lh logr.Logger) (*cdiSpec.Spec, error) {
 	return spec, nil
 }
 
-func (c *Manager) writeSpecToFile(lh logr.Logger, spec *cdiSpec.Spec) error {
+func (c *Manager) writeSpecToFile(lh logr.Logger, spec *cdiSpec.Spec) (err error) {
 	lh.V(2).Info("updating CDI spec file", "path", c.path)
 
 	tmpFile, err := os.CreateTemp(SpecDir, c.driverName)
@@ -174,7 +174,13 @@ func (c *Manager) writeSpecToFile(lh logr.Logger, spec *cdiSpec.Spec) error {
 		return fmt.Errorf("failed to create temporary CDI spec: %w", err)
 	}
 	defer func() {
-		_ = os.Remove(tmpFile.Name())
+		// avoid file descriptor leakage or undeterministic closure
+		// note we ignore the error; this is intentional because in the happy
+		// path we will have a double close(), which is however harmless.
+		_ = tmpFile.Close()
+		if err != nil {
+			_ = os.Remove(tmpFile.Name())
+		}
 	}()
 
 	data, err := json.MarshalIndent(spec, "", "  ")
