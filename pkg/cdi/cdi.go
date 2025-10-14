@@ -24,8 +24,9 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/types"
 	cdiSpec "tags.cncf.io/container-device-interface/specs-go"
+
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (

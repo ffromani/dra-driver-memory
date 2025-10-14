@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/go-logr/logr"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
+
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"

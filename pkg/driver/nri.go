@@ -23,6 +23,8 @@ import (
 	"github.com/go-logr/logr"
 
 	"k8s.io/utils/cpuset"
+
+	"github.com/ffromani/dra-driver-memory/pkg/draenv"
 )
 
 // NRI is the actuation layer. Once we reach this point, all the allocation decisions
@@ -40,7 +42,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
 
-	claimAllocations, err := parseDRAEnvToClaimAllocations(lh, ctr.Env)
+	claimAllocations, err := draenv.ToClaimAllocations(lh, ctr.Env)
 	if err != nil {
 		lh.Error(err, "parsing DRA env for container")
 	}

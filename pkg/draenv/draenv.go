@@ -14,27 +14,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package driver
+package draenv
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/go-logr/logr"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/cpuset"
+
+	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 )
 
 // This is the internal "communication" layer helpers. DRA and NRI layers communicate
 // through CDI specs and other channels whose code sits here.
 
-func makeDRAEnvFromClaimAllocations(lh logr.Logger, claimUID types.UID, claimNodes sets.Set[int64]) string {
+func FromClaimAllocations(lh logr.Logger, claimUID types.UID, claimNodes sets.Set[int64]) string {
 	return fmt.Sprintf("%s_%s=%s", cdi.EnvVarPrefix, claimUID, numaNodesToString(claimNodes))
 }
 
-func parseDRAEnvToClaimAllocations(lh logr.Logger, envs []string) (map[types.UID]cpuset.CPUSet, error) {
+func ToClaimAllocations(lh logr.Logger, envs []string) (map[types.UID]cpuset.CPUSet, error) {
 	allocations := make(map[types.UID]cpuset.CPUSet)
 
 	for _, env := range envs {

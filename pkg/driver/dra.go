@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,9 +29,9 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
-	cdiparser "tags.cncf.io/container-device-interface/pkg/parser"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
+	"github.com/ffromani/dra-driver-memory/pkg/draenv"
 	"github.com/ffromani/dra-driver-memory/pkg/ghwinfo"
 )
 
@@ -142,8 +143,8 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 		return kubeletplugin.PrepareResult{}
 	}
 
+	envVar := draenv.FromClaimAllocations(lh, claim.UID, claimNodes)
 	deviceName := cdi.MakeDeviceName(claim.UID)
-	envVar := fmt.Sprintf("%s_%s=%s", cdi.EnvVarPrefix, claim.UID, numaNodesToString(claimNodes))
 
 	err := mdrv.cdiMgr.AddDevice(lh, deviceName, envVar)
 	if err != nil {
