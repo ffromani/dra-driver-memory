@@ -33,12 +33,17 @@ import (
 func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
 	lh, _ := logr.FromContext(ctx)
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil, nil
 }
 
 func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("CreateContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
+
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
 
@@ -66,30 +71,40 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 func (mdrv *MemoryDriver) StopContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) ([]*api.ContainerUpdate, error) {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("StopContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil, nil
 }
 
 func (mdrv *MemoryDriver) RemoveContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("RemoveContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil
 }
 
 func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("RunPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil
 }
 
 func (mdrv *MemoryDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("StopPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil
 }
 
 func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
 	return nil
 }
 
