@@ -18,6 +18,7 @@ package ghwinfo
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/go-logr/logr"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
@@ -55,7 +56,7 @@ func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Sl
 				"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
 			},
 			Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-				"memory": resourceapi.DeviceCapacity{
+				"memory": {
 					Value: *memQty,
 				},
 			},
@@ -64,8 +65,15 @@ func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Sl
 		memorySlice.Devices = append(memorySlice.Devices, memDevice)
 		deviceNameToNUMANode[memDevice.Name] = numaNode
 
-		for sizeInBytes, amounts := range nodeInfo.Memory.HugePageAmountsBySize {
-			hpBasename := hugepageNameBySizeInBytes(sizeInBytes)
+		var sizeInBytes []uint64
+		for sz := range nodeInfo.Memory.HugePageAmountsBySize {
+			sizeInBytes = append(sizeInBytes, sz)
+		}
+		slices.Sort(sizeInBytes)
+
+		for _, hpSize := range sizeInBytes {
+			amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
+			hpBasename := hugepageNameBySizeInBytes(hpSize)
 			hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
 			hpDevice := resourceapi.Device{
 				Name: MakeDeviceName(hpBasename, numaNode),
@@ -75,7 +83,7 @@ func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Sl
 					"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
 				},
 				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-					"pages": resourceapi.DeviceCapacity{
+					"pages": {
 						Value: *hpQty,
 					},
 				},

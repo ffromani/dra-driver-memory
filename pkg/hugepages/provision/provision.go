@@ -24,6 +24,7 @@ func ReadConfiguration(source string) (apiv0.HugePageProvision, error) {
 	if err != nil {
 		return apiv0.HugePageProvision{}, err
 	}
+	//nolint:errcheck
 	defer src.Close()
 	return readConfigurationFrom(src)
 }
@@ -40,12 +41,13 @@ func RuntimeHugepages(logger logr.Logger, hpp apiv0.HugePageProvision, sysRoot s
 	for _, conf := range hpp.Spec.Pages {
 		var err error
 
-		if conf.Node != nil {
-			logger.V(2).Info("provisioning pages", "numaNode", *conf.Node, "count", conf.Count, "size", conf.Size)
-			err = provisionOnNode(logger, int(*conf.Node), int(conf.Count), conf.Size, sysRoot)
-		} else if len(sysinfo.Nodes) == 1 {
-			logger.V(2).Info("provisioning pages", "numaNode", 0, "count", conf.Count, "size", conf.Size)
-			err = provisionOnNode(logger, 0, int(conf.Count), conf.Size, sysRoot)
+		if len(sysinfo.Nodes) == 1 {
+			numaNode := 0
+			if conf.Node != nil {
+				numaNode = int(*conf.Node)
+			}
+			logger.V(2).Info("provisioning pages", "numaNode", numaNode, "count", conf.Count, "size", conf.Size)
+			err = provisionOnNode(logger, numaNode, int(conf.Count), conf.Size, sysRoot)
 		} else {
 			logger.V(2).Info("splitting pages", "count", conf.Count, "NUMACount", len(sysinfo.Nodes))
 			err = provisionOnMultiNode(logger, len(sysinfo.Nodes), int(conf.Count), conf.Size, sysRoot)
@@ -82,12 +84,13 @@ func provisionOnNode(logger logr.Logger, numaNode, hpCount int, apiHpSize apiv0.
 	if err != nil {
 		return err
 	}
-	hpPath := filepath.Join(sysRoot, "sys", "devices", "system", "node", fmt.Sprintf("node%d", numaNode), "hugepages", "hugepages-"+string(hpSize), "nr_hugepages")
+	hpPath := filepath.Join(sysRoot, "sys", "devices", "system", "node", fmt.Sprintf("node%d", numaNode), "hugepages", "hugepages-"+hpSize, "nr_hugepages")
 	logger.V(4).Info("writing on sysfs", "path", hpPath)
 	dst, err := os.OpenFile(hpPath, os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
+	//nolint:errcheck
 	defer dst.Close()
 	_, err = dst.WriteString(strconv.Itoa(hpCount))
 	return fmt.Errorf("failed to write on %q: %w", hpPath, err)
