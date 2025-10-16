@@ -59,6 +59,10 @@ update: ## runs go mod tidy
 $(OUT_DIR):  ## creates the output directory (used internally)
 	mkdir -p $(OUT_DIR)
 
+.PHONY: vet
+vet:  ## vet the source code tree
+	go vet ./pkg/... ./internal/... ./cmd/...
+
 # get image name from directory we're building
 CLUSTER_NAME=dra-driver-memory
 STAGING_REPO_NAME=dra-driver-memory

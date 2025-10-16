@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
+
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
@@ -55,8 +56,8 @@ func TestDiscover(t *testing.T) {
 							},
 							DefaultHugePageSize: 2097152,
 							HugePageAmountsBySize: map[uint64]*ghwmemory.HugePageAmounts{
-								1073741824: &ghwmemory.HugePageAmounts{},
-								2097152:    &ghwmemory.HugePageAmounts{},
+								1073741824: {},
+								2097152:    {},
 							},
 						},
 					},
@@ -72,7 +73,7 @@ func TestDiscover(t *testing.T) {
 							Name:       "memory-XXXXXX",
 							Attributes: attributesForNUMANode(int64(0)),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"memory": resourceapi.DeviceCapacity{
+								"memory": {
 									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
 								},
 							},
@@ -83,20 +84,20 @@ func TestDiscover(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name:       "hugepages-1g-XXXXXX",
+							Name:       "hugepages-2m-XXXXXX",
 							Attributes: attributesForNUMANode(int64(0)),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"pages": resourceapi.DeviceCapacity{
+								"pages": {
 									Value: *resource.NewQuantity(0, resource.DecimalSI),
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
 						},
 						{
-							Name:       "hugepages-2m-XXXXXX",
+							Name:       "hugepages-1g-XXXXXX",
 							Attributes: attributesForNUMANode(int64(0)),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"pages": resourceapi.DeviceCapacity{
+								"pages": {
 									Value: *resource.NewQuantity(0, resource.DecimalSI),
 								},
 							},
@@ -136,8 +137,8 @@ func TestDiscover(t *testing.T) {
 
 func attributesForNUMANode(numaNode int64) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		"dra.cpu/numaNode":    resourceapi.DeviceAttribute{IntValue: ptr.To(numaNode)},
-		"dra.memory/numaNode": resourceapi.DeviceAttribute{IntValue: ptr.To(numaNode)},
-		"dra.net/numaNode":    resourceapi.DeviceAttribute{IntValue: ptr.To(numaNode)},
+		"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
+		"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
+		"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
 	}
 }

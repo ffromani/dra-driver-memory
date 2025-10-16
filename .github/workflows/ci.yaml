@@ -1,0 +1,73 @@
+name: CI Base
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches: 
+      - main
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  GOLANG_VERSION: 1.24
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up golang
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GOLANG_VERSION }}
+
+    - name: format
+      run: ./hack/check-format.sh
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up golang
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GOLANG_VERSION }}
+
+    - name: Verify modules
+      run: go mod verify
+
+    - name: Vetting
+      run: make vet
+
+    - name: Run unit tests
+      run: make test-unit
+
+  golangci-lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up golang
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GOLANG_VERSION }}
+
+    - name: Ensure vendoring
+      run: go mod vendor
+
+    - name: Ensure linter avaialbility
+      run: make dep-install-golangci-lint
+
+    - name: Run linter
+      run: make lint
