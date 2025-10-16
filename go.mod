@@ -8,6 +8,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/jaypipes/ghw v0.19.1
 	github.com/prometheus/client_golang v1.22.0
+	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1

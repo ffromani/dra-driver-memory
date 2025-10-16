@@ -19,6 +19,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -30,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
 	"github.com/go-logr/logr"
@@ -62,7 +64,9 @@ func (f SysinformerFunc) Topology() (*ghwtopology.Info, error) {
 }
 
 func main() {
-	var ready atomic.Bool
+	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, unix.SIGTERM)
+	// ignore stop() as we gonna os.Exit() anyway. Intentional minor leak.
+
 	setupLogger := stdr.New(log.New(os.Stderr, "", log.Lshortfile))
 
 	params := DefaultParams()
@@ -70,15 +74,31 @@ func main() {
 	params.ParseFlags()
 	params.DumpFlags(setupLogger)
 
-	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
-	if err != nil {
-		setupLogger.Error(err, "cannot determine system topology")
-		os.Exit(1)
-	}
 	if params.InspectOnly {
-		dumpMemoryInfo(sysinfo, setupLogger)
+		if err := runInspect(params, setupLogger); err != nil {
+			setupLogger.Error(err, "inspection failed")
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
+
+	if err := runDaemon(ctx, params, setupLogger); err != nil {
+		setupLogger.Error(err, "daemon failed")
+		os.Exit(1)
+	}
+}
+
+func runInspect(params Params, setupLogger logr.Logger) error {
+	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+	if err != nil {
+		return err
+	}
+	dumpMemoryInfo(sysinfo, setupLogger)
+	return nil
+}
+
+func runDaemon(ctx context.Context, params Params, setupLogger logr.Logger) error {
+	var ready atomic.Bool
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -98,10 +118,25 @@ func main() {
 		WriteTimeout:      10 * time.Second,
 	}
 
-	go func() {
-		_ = server.ListenAndServe()
-	}()
+	eg, egCtx := errgroup.WithContext(ctx)
 
+	eg.Go(func() error {
+		setupLogger.Info("starting metrics and healthz server", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("http server failed: %w", err)
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		<-egCtx.Done() // Wait for cancellation from errgroup context
+		setupLogger.Info("shutting down metrics and healthz server")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
+	})
+
+	var err error
 	var config *rest.Config
 	if params.Kubeconfig != "" {
 		config, err = clientcmd.BuildConfigFromFlags("", params.Kubeconfig)
@@ -109,8 +144,7 @@ func main() {
 		config, err = rest.InClusterConfig()
 	}
 	if err != nil {
-		setupLogger.Error(err, "cannot create client-go configuration")
-		os.Exit(1)
+		return fmt.Errorf("cannot create client-go configuration: %w", err)
 	}
 
 	// use protobuf for better performance at scale
@@ -120,51 +154,39 @@ func main() {
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		setupLogger.Error(err, "cannot create client-go client")
-		os.Exit(2)
+		return fmt.Errorf("cannot create client-go client: %w", err)
 	}
 
 	nodeName, err := nodeutil.GetHostname(params.HostnameOverride)
 	if err != nil {
-		setupLogger.Error(err, "cannot obtain the node name, use the hostname-override flag if you want to set it to a specific value")
-		os.Exit(2)
+		return fmt.Errorf("cannot obtain the node name, use the hostname-override flag if you want to set it to a specific value: %w", err)
 	}
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-
-	signalCh := make(chan os.Signal, 2)
-	defer func() {
-		close(signalCh)
-		cancel()
-	}()
-	signal.Notify(signalCh, os.Interrupt, unix.SIGINT)
+	drvLogger, err := makeLogger(setupLogger)
+	if err != nil {
+		return err
+	}
 
 	driverEnv := driver.Environment{
 		DriverName: driverName,
 		NodeName:   nodeName,
 		Clientset:  clientset,
-		Logger:     makeLogger(setupLogger),
+		Logger:     drvLogger,
 		Sysinform: SysinformerFunc(func() (*ghwtopology.Info, error) {
 			return ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
 		}),
 	}
-	dramem, err := driver.Start(ctx, driverEnv)
+	dramem, err := driver.Start(egCtx, driverEnv)
 	if err != nil {
-		setupLogger.Error(err, "driver failed to start")
-		os.Exit(4)
+		return fmt.Errorf("driver failed to start: %w", err)
 	}
+	defer setupLogger.Info("driver stopped") // ensure correct ordering of logs
 	defer dramem.Stop()
+
 	ready.Store(true)
 	setupLogger.Info("driver started")
 
-	select {
-	case <-signalCh:
-		setupLogger.Info("Exiting: received signal")
-		cancel()
-	case <-ctx.Done():
-		setupLogger.Info("Exiting: context cancelled")
-	}
+	return eg.Wait()
 }
 
 func printVersion(lh logr.Logger) {
@@ -174,8 +196,7 @@ func printVersion(lh logr.Logger) {
 	}
 	var vcsRevision string
 	for _, f := range info.Settings {
-		switch f.Key {
-		case "vcs.revision":
+		if f.Key == "vcs.revision" {
 			vcsRevision = f.Value
 		}
 	}
@@ -215,21 +236,20 @@ func (par *Params) DumpFlags(lh logr.Logger) {
 	})
 }
 
-func makeLogger(setupLogger logr.Logger) logr.Logger {
+func makeLogger(setupLogger logr.Logger) (logr.Logger, error) {
 	lev, err := kloglevel.Get()
 	if err != nil {
-		setupLogger.Error(err, "cannot get verbosity, going dark")
-		return logr.Discard() // TODO: fail?
+		return logr.Discard(), fmt.Errorf("cannot get verbosity, going dark: %w", err)
 	}
 	config := textlogger.NewConfig(textlogger.Verbosity(int(lev)))
-	return textlogger.NewLogger(config)
+	return textlogger.NewLogger(config), nil
 }
 
 func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
 	for _, node := range sysinfo.Nodes {
 		data, err := yaml.Marshal(node.Memory)
 		if err != nil {
-			logger.Error(err, "marshalling data for node %d", node.ID)
+			logger.Error(err, "marshaling data for node %d", node.ID)
 		}
 		// re-indent, bruteforce way
 		var lines []string
