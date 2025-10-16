@@ -1,18 +1,18 @@
 /*
-Copyright 2025 The Kubernetes Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+ * Copyright 2025 The Kubernetes Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package ghwinfo
 
@@ -29,6 +29,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// enables testing
+var MakeDeviceName = func(devName string, _ int64) string {
+	return devName + "-" + k8srand.String(6)
+}
+
 func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Slice, map[string]int64) {
 	deviceNameToNUMANode := make(map[string]int64)
 	memorySlice := resourceslice.Slice{}
@@ -43,7 +48,7 @@ func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Sl
 
 		memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
 		memDevice := resourceapi.Device{
-			Name: "memory-" + k8srand.String(6),
+			Name: MakeDeviceName("memory", numaNode),
 			Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
 				"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
@@ -63,7 +68,7 @@ func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Sl
 			hpBasename := hugepageNameBySizeInBytes(sizeInBytes)
 			hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
 			hpDevice := resourceapi.Device{
-				Name: hpBasename + "-" + k8srand.String(6),
+				Name: MakeDeviceName(hpBasename, numaNode),
 				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 					"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
 					"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
