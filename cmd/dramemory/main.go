@@ -51,6 +51,7 @@ import (
 
 	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
+	"github.com/ffromani/dra-driver-memory/pkg/hugepages/provision"
 )
 
 const (
@@ -77,6 +78,19 @@ func main() {
 	if params.InspectOnly {
 		if err := runInspect(params, setupLogger); err != nil {
 			setupLogger.Error(err, "inspection failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if params.HugePages.RuntimeProvisionConfig != "" {
+		logger, err := makeLogger(setupLogger)
+		if err != nil {
+			setupLogger.Error(err, "creating logger")
+			os.Exit(1)
+		}
+		if err := runHugePagesProvision(params, logger); err != nil {
+			setupLogger.Error(err, "hugepages provisioning failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -203,12 +217,17 @@ func printVersion(lh logr.Logger) {
 	lh.Info("dramemory", "golang", info.GoVersion, "build", vcsRevision)
 }
 
+type HugePagesParams struct {
+	RuntimeProvisionConfig string
+}
+
 type Params struct {
 	HostnameOverride string
 	Kubeconfig       string
 	BindAddress      string
 	SysRoot          string
 	InspectOnly      bool
+	HugePages        HugePagesParams
 }
 
 func DefaultParams() Params {
@@ -223,6 +242,7 @@ func (par *Params) InitFlags() {
 	flag.StringVar(&par.HostnameOverride, "hostname-override", par.HostnameOverride, "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
 	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
 	flag.BoolVar(&par.InspectOnly, "inspect", par.InspectOnly, "inspect machine properties and exit.")
+	flag.StringVar(&par.HugePages.RuntimeProvisionConfig, "hugepages-provision", par.HugePages.RuntimeProvisionConfig, "provision hugepages at runtime (now) using the config at path (`-` for stdin).")
 }
 
 func (par *Params) ParseFlags() {
@@ -259,4 +279,16 @@ func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
 		}
 		fmt.Printf("* node=%d:\n  %s\n", node.ID, strings.Join(lines, "\n  "))
 	}
+}
+
+func runHugePagesProvision(params Params, setupLogger logr.Logger) error {
+	config, err := provision.ReadConfiguration(params.HugePages.RuntimeProvisionConfig)
+	if err != nil {
+		return err
+	}
+	err = provision.RuntimeHugepages(setupLogger, config, params.SysRoot)
+	if err != nil {
+		return err
+	}
+	return nil
 }
