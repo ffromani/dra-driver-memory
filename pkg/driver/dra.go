@@ -36,7 +36,7 @@ import (
 )
 
 // This is the DRA frontend. Allocation, if and when required, will happen at this layer.
-// The core responsability of this layer is to translate Device Requests into CDI specs,
+// The core responsibility of this layer is to translate Device Requests into CDI specs,
 // and to manage the latter on the node.
 
 func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
