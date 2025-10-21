@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-package ghwinfo
+package sysinfo
 
 import (
 	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
+	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	resourceapi "k8s.io/api/resource/v1"
@@ -30,17 +31,42 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+type Zone struct {
+	ID        int             `json:"id"`
+	Distances []int           `json:"distances"`
+	Memory    *ghwmemory.Area `json:"memory"`
+}
+
+func FromNodes(nodes []*ghwtopology.Node) []Zone {
+	zones := make([]Zone, 0, len(nodes))
+	for _, node := range nodes {
+		zones = append(zones, Zone{
+			ID:        node.ID,
+			Distances: node.Distances,
+			Memory:    node.Memory,
+		})
+	}
+	return zones
+}
+
+type MachineData struct {
+	Pagesize int    `json:"pagesize"`
+	Zones    []Zone `json:"zones"`
+}
+
 // enables testing
 var MakeDeviceName = func(devName string, _ int64) string {
 	return devName + "-" + k8srand.String(6)
 }
 
-func Discover(lh logr.Logger, systopology *ghwtopology.Info) ([]resourceslice.Slice, map[string]int64) {
+// Process processes MachineData and creates resource slices out of it, plus a device:numaNode mapping.
+// This function cannot really fail and never returns invalid data but it can return empty data.
+func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[string]int64) {
 	deviceNameToNUMANode := make(map[string]int64)
 	memorySlice := resourceslice.Slice{}
 	hugepageSlice := resourceslice.Slice{}
 
-	for numaNode, nodeInfo := range systopology.Nodes {
+	for numaNode, nodeInfo := range machine.Zones {
 		if nodeInfo.Memory == nil {
 			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
 			continue

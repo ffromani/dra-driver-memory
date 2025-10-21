@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -27,7 +26,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -52,15 +50,22 @@ import (
 	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
 	"github.com/ffromani/dra-driver-memory/pkg/hugepages/provision"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
 const (
 	driverName = "dra.memory"
 )
 
-type SysinformerFunc func() (*ghwtopology.Info, error)
+type SysinfoVerifierFunc func() error
 
-func (f SysinformerFunc) Topology() (*ghwtopology.Info, error) {
+func (f SysinfoVerifierFunc) Validate() error {
+	return f()
+}
+
+type SysinfoDiscovererFunc func() (sysinfo.MachineData, error)
+
+func (f SysinfoDiscovererFunc) Discover() (sysinfo.MachineData, error) {
 	return f()
 }
 
@@ -78,6 +83,14 @@ func main() {
 	if params.InspectOnly {
 		if err := runInspect(params, setupLogger); err != nil {
 			setupLogger.Error(err, "inspection failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if params.ValidateOnly {
+		if err := runValidate(params, setupLogger); err != nil {
+			setupLogger.Error(err, "validation failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -103,11 +116,23 @@ func main() {
 }
 
 func runInspect(params Params, setupLogger logr.Logger) error {
-	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+	topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
 	if err != nil {
 		return err
 	}
-	dumpMemoryInfo(sysinfo, setupLogger)
+	machine := sysinfo.MachineData{
+		Pagesize: os.Getpagesize(),
+		Zones:    sysinfo.FromNodes(topo.Nodes),
+	}
+	dumpMemoryInfo(machine, setupLogger)
+	return nil
+}
+
+func runValidate(params Params, setupLogger logr.Logger) error {
+	if err := sysinfo.Validate(setupLogger, params.ProcRoot); err != nil {
+		return err
+	}
+	fmt.Println("PASS")
 	return nil
 }
 
@@ -186,8 +211,18 @@ func runDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 		NodeName:   nodeName,
 		Clientset:  clientset,
 		Logger:     drvLogger,
-		Sysinform: SysinformerFunc(func() (*ghwtopology.Info, error) {
-			return ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+		SysVerifier: SysinfoVerifierFunc(func() error {
+			return sysinfo.Validate(drvLogger, params.ProcRoot)
+		}),
+		SysDiscover: SysinfoDiscovererFunc(func() (sysinfo.MachineData, error) {
+			topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+			if err != nil {
+				return sysinfo.MachineData{}, err
+			}
+			return sysinfo.MachineData{
+				Pagesize: os.Getpagesize(),
+				Zones:    sysinfo.FromNodes(topo.Nodes),
+			}, nil
 		}),
 	}
 	dramem, err := driver.Start(egCtx, driverEnv)
@@ -225,8 +260,10 @@ type Params struct {
 	HostnameOverride string
 	Kubeconfig       string
 	BindAddress      string
+	ProcRoot         string
 	SysRoot          string
 	InspectOnly      bool
+	ValidateOnly     bool
 	HugePages        HugePagesParams
 }
 
@@ -240,8 +277,10 @@ func (par *Params) InitFlags() {
 	klog.InitFlags(nil)
 	flag.StringVar(&par.Kubeconfig, "kubeconfig", par.Kubeconfig, "Absolute path to the kubeconfig file.")
 	flag.StringVar(&par.HostnameOverride, "hostname-override", par.HostnameOverride, "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
+	flag.StringVar(&par.ProcRoot, "procfs-root", par.ProcRoot, "root point where procfs is mounted.")
 	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
 	flag.BoolVar(&par.InspectOnly, "inspect", par.InspectOnly, "inspect machine properties and exit.")
+	flag.BoolVar(&par.ValidateOnly, "validate", par.ValidateOnly, "validate machine properties and exit.")
 	flag.StringVar(&par.HugePages.RuntimeProvisionConfig, "hugepages-provision", par.HugePages.RuntimeProvisionConfig, "provision hugepages at runtime (now) using the config at path (`-` for stdin).")
 }
 
@@ -265,20 +304,12 @@ func makeLogger(setupLogger logr.Logger) (logr.Logger, error) {
 	return textlogger.NewLogger(config), nil
 }
 
-func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
-	for _, node := range sysinfo.Nodes {
-		data, err := yaml.Marshal(node.Memory)
-		if err != nil {
-			logger.Error(err, "marshaling data for node %d", node.ID)
-		}
-		// re-indent, bruteforce way
-		var lines []string
-		sc := bufio.NewScanner(strings.NewReader(string(data)))
-		for sc.Scan() {
-			lines = append(lines, sc.Text())
-		}
-		fmt.Printf("* node=%d:\n  %s\n", node.ID, strings.Join(lines, "\n  "))
+func dumpMemoryInfo(machine sysinfo.MachineData, logger logr.Logger) {
+	data, err := yaml.Marshal(machine)
+	if err != nil {
+		logger.Error(err, "marshaling data")
 	}
+	fmt.Printf("%s\n", string(data))
 }
 
 func runHugePagesProvision(params Params, setupLogger logr.Logger) error {
