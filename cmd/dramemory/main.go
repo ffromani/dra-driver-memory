@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -27,7 +26,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -52,15 +50,16 @@ import (
 	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
 	"github.com/ffromani/dra-driver-memory/pkg/hugepages/provision"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
 const (
 	driverName = "dra.memory"
 )
 
-type SysinformerFunc func() (*ghwtopology.Info, error)
+type SysinfoDiscovererFunc func() (sysinfo.MachineData, error)
 
-func (f SysinformerFunc) Topology() (*ghwtopology.Info, error) {
+func (f SysinfoDiscovererFunc) Discover() (sysinfo.MachineData, error) {
 	return f()
 }
 
@@ -103,11 +102,15 @@ func main() {
 }
 
 func runInspect(params Params, setupLogger logr.Logger) error {
-	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+	topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
 	if err != nil {
 		return err
 	}
-	dumpMemoryInfo(sysinfo, setupLogger)
+	machine := sysinfo.MachineData{
+		Pagesize: os.Getpagesize(),
+		Zones:    sysinfo.FromNodes(topo.Nodes),
+	}
+	dumpMemoryInfo(machine, setupLogger)
 	return nil
 }
 
@@ -186,8 +189,15 @@ func runDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 		NodeName:   nodeName,
 		Clientset:  clientset,
 		Logger:     drvLogger,
-		Sysinform: SysinformerFunc(func() (*ghwtopology.Info, error) {
-			return ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+		SysDiscover: SysinfoDiscovererFunc(func() (sysinfo.MachineData, error) {
+			topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+			if err != nil {
+				return sysinfo.MachineData{}, err
+			}
+			return sysinfo.MachineData{
+				Pagesize: os.Getpagesize(),
+				Zones:    sysinfo.FromNodes(topo.Nodes),
+			}, nil
 		}),
 	}
 	dramem, err := driver.Start(egCtx, driverEnv)
@@ -265,20 +275,12 @@ func makeLogger(setupLogger logr.Logger) (logr.Logger, error) {
 	return textlogger.NewLogger(config), nil
 }
 
-func dumpMemoryInfo(sysinfo *ghwtopology.Info, logger logr.Logger) {
-	for _, node := range sysinfo.Nodes {
-		data, err := yaml.Marshal(node.Memory)
-		if err != nil {
-			logger.Error(err, "marshaling data for node %d", node.ID)
-		}
-		// re-indent, bruteforce way
-		var lines []string
-		sc := bufio.NewScanner(strings.NewReader(string(data)))
-		for sc.Scan() {
-			lines = append(lines, sc.Text())
-		}
-		fmt.Printf("* node=%d:\n  %s\n", node.ID, strings.Join(lines, "\n  "))
+func dumpMemoryInfo(machine sysinfo.MachineData, logger logr.Logger) {
+	data, err := yaml.Marshal(machine)
+	if err != nil {
+		logger.Error(err, "marshaling data")
 	}
+	fmt.Printf("%s\n", string(data))
 }
 
 func runHugePagesProvision(params Params, setupLogger logr.Logger) error {

@@ -32,7 +32,7 @@ import (
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/ffromani/dra-driver-memory/pkg/draenv"
-	"github.com/ffromani/dra-driver-memory/pkg/ghwinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
 // This is the DRA frontend. Allocation, if and when required, will happen at this layer.
@@ -45,17 +45,18 @@ func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 	lh.V(2).Info("start")
 	defer lh.V(2).Info("done")
 
-	systopology, err := mdrv.sysinformer.Topology()
+	machinedata, err := mdrv.sysinformer.Discover()
 	if err != nil {
 		lh.Error(err, "enumerating memory resources")
 		return
 	}
 
-	slices, deviceNameToNUMANodeMap := ghwinfo.Discover(lh, systopology)
+	slices, deviceNameToNUMANodeMap := sysinfo.Process(lh, machinedata)
 	mdrv.deviceNameToNUMANode = deviceNameToNUMANodeMap
 
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
+
 			mdrv.nodeName: {
 				Slices: slices,
 			},

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package ghwinfo
+package sysinfo
 
 import (
 	"testing"
@@ -22,7 +22,6 @@ import (
 	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,10 +29,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TestDiscover(t *testing.T) {
+func TestProcess(t *testing.T) {
 	type testcase struct {
 		name              string
-		topo              *ghwtopology.Info
+		machine           MachineData
 		makeDeviceName    func(string, int64) string
 		expectedSlices    []resourceslice.Slice
 		expectedDevToNode map[string]int64
@@ -42,11 +41,12 @@ func TestDiscover(t *testing.T) {
 	testcases := []testcase{
 		{
 			name: "single NUMA-node",
-			topo: &ghwtopology.Info{
-				Architecture: ghwtopology.ArchitectureSMP, // ghw quirk
-				Nodes: []*ghwtopology.Node{
+			machine: MachineData{
+				Pagesize: 4096,
+				Zones: []Zone{
 					{
-						ID: 0,
+						ID:        0,
+						Distances: []int{10},
 						Memory: &ghwmemory.Area{
 							TotalPhysicalBytes: 34225520640,
 							TotalUsableBytes:   33332322304,
@@ -123,7 +123,7 @@ func TestDiscover(t *testing.T) {
 			MakeDeviceName = tcase.makeDeviceName
 
 			logger := testr.New(t)
-			gotSlices, gotMap := Discover(logger, tcase.topo)
+			gotSlices, gotMap := Process(logger, tcase.machine)
 
 			if diff := cmp.Diff(gotSlices, tcase.expectedSlices); diff != "" {
 				t.Errorf("unexpected resourceslice: %s", diff)

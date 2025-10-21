@@ -25,7 +25,6 @@ import (
 
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/go-logr/logr"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +33,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
 // This is the orchestration layer. All the sub-components (DRA layer, NRI layer, CDI manager...)
@@ -60,30 +60,38 @@ type MemoryDriver struct {
 	nriPlugin            stub.Stub
 	cdiMgr               *cdi.Manager
 	logger               logr.Logger
-	sysinformer          Sysinformer
+	sysinformer          SysinfoDiscoverer
 	deviceNameToNUMANode map[string]int64
 }
 
-type Sysinformer interface {
-	Topology() (*ghwtopology.Info, error)
+type SysinfoVerifier interface {
+	Validate() error
+}
+
+type SysinfoDiscoverer interface {
+	Discover() (sysinfo.MachineData, error)
 }
 
 type Environment struct {
-	Logger     logr.Logger
-	DriverName string
-	NodeName   string
-	Clientset  kubernetes.Interface
-	Sysinform  Sysinformer
+	Logger      logr.Logger
+	DriverName  string
+	NodeName    string
+	Clientset   kubernetes.Interface
+	SysDiscover SysinfoDiscoverer
+	SysVerifier SysinfoVerifier
 }
 
 // Start creates and starts a new MemoryDriver.
 func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
+	if err := env.SysVerifier.Validate(); err != nil {
+		return nil, err
+	}
 	plugin := &MemoryDriver{
 		driverName:           env.DriverName,
 		nodeName:             env.NodeName,
 		kubeClient:           env.Clientset,
 		logger:               env.Logger.WithName(env.DriverName),
-		sysinformer:          env.Sysinform,
+		sysinformer:          env.SysDiscover,
 		deviceNameToNUMANode: make(map[string]int64),
 	}
 
