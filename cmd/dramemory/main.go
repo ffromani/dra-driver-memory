@@ -57,6 +57,12 @@ const (
 	driverName = "dra.memory"
 )
 
+type SysinfoVerifierFunc func() error
+
+func (f SysinfoVerifierFunc) Validate() error {
+	return f()
+}
+
 type SysinfoDiscovererFunc func() (sysinfo.MachineData, error)
 
 func (f SysinfoDiscovererFunc) Discover() (sysinfo.MachineData, error) {
@@ -77,6 +83,14 @@ func main() {
 	if params.InspectOnly {
 		if err := runInspect(params, setupLogger); err != nil {
 			setupLogger.Error(err, "inspection failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if params.ValidateOnly {
+		if err := runValidate(params, setupLogger); err != nil {
+			setupLogger.Error(err, "validation failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -111,6 +125,14 @@ func runInspect(params Params, setupLogger logr.Logger) error {
 		Zones:    sysinfo.FromNodes(topo.Nodes),
 	}
 	dumpMemoryInfo(machine, setupLogger)
+	return nil
+}
+
+func runValidate(params Params, setupLogger logr.Logger) error {
+	if err := sysinfo.Validate(setupLogger, params.ProcRoot); err != nil {
+		return err
+	}
+	fmt.Println("PASS")
 	return nil
 }
 
@@ -189,6 +211,9 @@ func runDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 		NodeName:   nodeName,
 		Clientset:  clientset,
 		Logger:     drvLogger,
+		SysVerifier: SysinfoVerifierFunc(func() error {
+			return sysinfo.Validate(drvLogger, params.ProcRoot)
+		}),
 		SysDiscover: SysinfoDiscovererFunc(func() (sysinfo.MachineData, error) {
 			topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
 			if err != nil {
@@ -235,8 +260,10 @@ type Params struct {
 	HostnameOverride string
 	Kubeconfig       string
 	BindAddress      string
+	ProcRoot         string
 	SysRoot          string
 	InspectOnly      bool
+	ValidateOnly     bool
 	HugePages        HugePagesParams
 }
 
@@ -250,8 +277,10 @@ func (par *Params) InitFlags() {
 	klog.InitFlags(nil)
 	flag.StringVar(&par.Kubeconfig, "kubeconfig", par.Kubeconfig, "Absolute path to the kubeconfig file.")
 	flag.StringVar(&par.HostnameOverride, "hostname-override", par.HostnameOverride, "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
+	flag.StringVar(&par.ProcRoot, "procfs-root", par.ProcRoot, "root point where procfs is mounted.")
 	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
 	flag.BoolVar(&par.InspectOnly, "inspect", par.InspectOnly, "inspect machine properties and exit.")
+	flag.BoolVar(&par.ValidateOnly, "validate", par.ValidateOnly, "validate machine properties and exit.")
 	flag.StringVar(&par.HugePages.RuntimeProvisionConfig, "hugepages-provision", par.HugePages.RuntimeProvisionConfig, "provision hugepages at runtime (now) using the config at path (`-` for stdin).")
 }
 
