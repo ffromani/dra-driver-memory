@@ -204,3 +204,21 @@ spec:
   selectors:
     - cel:
         expression: device.driver == "dra.memory"
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: dra.hugepages-2m
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "dra.memory"
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: dra.hugepages-1g
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "dra.memory"

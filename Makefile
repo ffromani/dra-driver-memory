@@ -136,6 +136,8 @@ ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install 
 		hack/ci/clusterrolebinding-dramemory.part.yaml \
 		hack/ci/daemonset-dramemory.part.yaml \
 		hack/ci/deviceclass-dra.memory.part.yaml \
+		hack/ci/deviceclass-dra.hugepages-1g.part.yaml \
+		hack/ci/deviceclass-dra.hugepages-2m.part.yaml \
 		> hack/ci/install-ci.yaml
 	@rm hack/ci/*.part.yaml
 
