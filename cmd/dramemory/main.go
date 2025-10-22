@@ -56,6 +56,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	if params.DoManifests {
+		if err := command.MakeManifests(params, setupLogger); err != nil {
+			setupLogger.Error(err, "manifests creation failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if params.HugePages.RuntimeProvisionConfig != "" {
 		logger, err := command.MakeLogger(setupLogger)
 		if err != nil {
