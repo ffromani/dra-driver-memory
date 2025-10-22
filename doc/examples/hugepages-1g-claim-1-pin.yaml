@@ -1,0 +1,20 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaim
+metadata:
+  name: hugepages-request-1g-1
+  namespace: default
+spec:
+  devices:
+    requests:
+    - exactly:
+        allocationMode: ExactCount
+        capacity:
+          requests:
+            pages: 1
+        count: 1
+        deviceClassName: dra.hugepages-1g
+        selectors:
+        - cel:
+            expression: |
+              device.attributes["dra.memory"].numaNode == 0
+      name: req-0
