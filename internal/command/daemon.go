@@ -24,10 +24,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/sync/errgroup"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,10 +34,9 @@ import (
 	nodeutil "k8s.io/component-helpers/node/util"
 	"k8s.io/klog/v2/textlogger"
 
+	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
-
-	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 )
 
 type SysinfoVerifierFunc func() error

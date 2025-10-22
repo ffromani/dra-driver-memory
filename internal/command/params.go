@@ -21,6 +21,7 @@ import (
 	"runtime/debug"
 
 	"github.com/go-logr/logr"
+
 	"k8s.io/klog/v2"
 )
 

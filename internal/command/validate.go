@@ -19,8 +19,9 @@ package command
 import (
 	"fmt"
 
-	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 	"github.com/go-logr/logr"
+
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
 func Validate(params Params, setupLogger logr.Logger) error {
