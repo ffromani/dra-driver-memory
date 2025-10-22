@@ -1,0 +1,7 @@
+kind: HugePageProvision
+metadata:
+  name: balanced-runtime
+spec:
+  pages:
+  - size: "1G"
+    count: 8

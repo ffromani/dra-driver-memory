@@ -93,7 +93,10 @@ func provisionOnNode(logger logr.Logger, numaNode, hpCount int, apiHpSize apiv0.
 	//nolint:errcheck
 	defer dst.Close()
 	_, err = dst.WriteString(strconv.Itoa(hpCount))
-	return fmt.Errorf("failed to write on %q: %w", hpPath, err)
+	if err != nil {
+		return fmt.Errorf("failed to write on %q: %w", hpPath, err)
+	}
+	return err
 }
 
 func readConfigurationFrom(r io.Reader) (apiv0.HugePageProvision, error) {

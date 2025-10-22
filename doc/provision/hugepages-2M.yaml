@@ -4,4 +4,4 @@ metadata:
 spec:
   pages:
   - size: "2M"
-    count: 512
+    count: 4096
