@@ -41,6 +41,10 @@ import (
 // Push any nontrivial logic into a subcomponent.
 
 const (
+	Name = "dra.memory"
+)
+
+const (
 	kubeletPluginPath = "/var/lib/kubelet/plugins"
 	// maxAttempts indicates the number of times the driver will try to recover itself before failing
 	maxAttempts = 5
