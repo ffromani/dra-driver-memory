@@ -43,7 +43,8 @@ type Params struct {
 
 func DefaultParams() Params {
 	return Params{
-		SysRoot: "/",
+		ProcRoot: "/",
+		SysRoot:  "/",
 	}
 }
 

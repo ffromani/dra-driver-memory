@@ -29,6 +29,7 @@ const (
 )
 
 var (
+	ErrCGroupV2Missing         = errors.New("cgroup v2 not configured")
 	ErrMemoryHugeTLBAccounting = errors.New("memory hugetlb accounting not supported")
 )
 
@@ -37,6 +38,10 @@ func Validate(lh logr.Logger, procRoot string) error {
 	if err != nil {
 		return fmt.Errorf("discovering mount infos: %w", err)
 	}
+	if len(mounts) == 0 {
+		return ErrCGroupV2Missing
+	}
+	lh.V(2).Info("system check", "cgroupV2", "pass")
 	for _, mount := range mounts {
 		if mount.FSType != cgroup2FSType {
 			continue
@@ -45,5 +50,6 @@ func Validate(lh logr.Logger, procRoot string) error {
 			return ErrMemoryHugeTLBAccounting
 		}
 	}
+	lh.V(2).Info("system check", "memoryHugetlbSplitAccounting", "pass")
 	return nil
 }
