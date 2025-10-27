@@ -17,6 +17,10 @@ featureGates:
   DRAResourceClaimDeviceStatus: true
   DRAConsumableCapacity: true
   DRAPartitionableDevices: true
+kubeadmConfigPatches:
+- |
+  kind: KubeletConfiguration
+  cgroupsPerQOS: false
 nodes:
 - role: control-plane
   image: kindest/node:v1.34.0
