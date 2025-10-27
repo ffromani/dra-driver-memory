@@ -40,45 +40,46 @@ func main() {
 	params.ParseFlags()
 	params.DumpFlags(setupLogger)
 
+	logger, err := command.MakeLogger(setupLogger)
+	if err != nil {
+		setupLogger.Error(err, "creating the main logger")
+		os.Exit(1)
+	}
+
 	if params.DoInspection {
-		if err := command.Inspect(params, setupLogger); err != nil {
-			setupLogger.Error(err, "inspection failed")
+		if err := command.Inspect(params, logger); err != nil {
+			logger.Error(err, "inspection failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
 	}
 
 	if params.DoValidation {
-		if err := command.Validate(params, setupLogger); err != nil {
-			setupLogger.Error(err, "validation failed")
+		if err := command.Validate(params, logger); err != nil {
+			logger.Error(err, "validation failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
 	}
 
 	if params.DoManifests {
-		if err := command.MakeManifests(params, setupLogger); err != nil {
-			setupLogger.Error(err, "manifests creation failed")
+		if err := command.MakeManifests(params, logger); err != nil {
+			logger.Error(err, "manifests creation failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
 	}
 
 	if params.HugePages.RuntimeProvisionConfig != "" {
-		logger, err := command.MakeLogger(setupLogger)
-		if err != nil {
-			setupLogger.Error(err, "creating logger")
-			os.Exit(1)
-		}
 		if err := command.ProvisionHugepages(params, logger); err != nil {
-			setupLogger.Error(err, "hugepages provisioning failed")
+			logger.Error(err, "hugepages provisioning failed")
 			os.Exit(1)
 		}
 		os.Exit(0)
 	}
 
-	if err := command.RunDaemon(ctx, params, setupLogger); err != nil {
-		setupLogger.Error(err, "daemon failed")
+	if err := command.RunDaemon(ctx, params, logger); err != nil {
+		logger.Error(err, "daemon failed")
 		os.Exit(1)
 	}
 }

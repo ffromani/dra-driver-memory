@@ -51,7 +51,7 @@ func (f SysinfoDiscovererFunc) Discover() (sysinfo.MachineData, error) {
 	return f()
 }
 
-func RunDaemon(ctx context.Context, params Params, setupLogger logr.Logger) error {
+func RunDaemon(ctx context.Context, params Params, drvLogger logr.Logger) error {
 	var ready atomic.Bool
 
 	mux := http.NewServeMux()
@@ -75,7 +75,7 @@ func RunDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		setupLogger.Info("starting metrics and healthz server", "addr", server.Addr)
+		drvLogger.Info("starting metrics and healthz server", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("http server failed: %w", err)
 		}
@@ -84,7 +84,7 @@ func RunDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 
 	eg.Go(func() error {
 		<-egCtx.Done() // Wait for cancellation from errgroup context
-		setupLogger.Info("shutting down metrics and healthz server")
+		drvLogger.Info("shutting down metrics and healthz server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
@@ -116,11 +116,6 @@ func RunDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 		return fmt.Errorf("cannot obtain the node name, use the hostname-override flag if you want to set it to a specific value: %w", err)
 	}
 
-	drvLogger, err := MakeLogger(setupLogger)
-	if err != nil {
-		return err
-	}
-
 	driverEnv := driver.Environment{
 		DriverName: driver.Name,
 		NodeName:   nodeName,
@@ -137,11 +132,11 @@ func RunDaemon(ctx context.Context, params Params, setupLogger logr.Logger) erro
 	if err != nil {
 		return fmt.Errorf("driver failed to start: %w", err)
 	}
-	defer setupLogger.Info("driver stopped") // ensure correct ordering of logs
+	defer drvLogger.Info("driver stopped") // ensure correct ordering of logs
 	defer dramem.Stop()
 
 	ready.Store(true)
-	setupLogger.Info("driver started")
+	drvLogger.Info("driver started")
 
 	return eg.Wait()
 }
