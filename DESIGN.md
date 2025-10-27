@@ -42,3 +42,4 @@ These design items are solidifying and gathering consensus but there is no full 
 These design items are very much work in progress and there is no clear direction yet. Most if not all the options are still on the table.
 
 1. Should we allow a best-effort runtime allocation of hugepages?
+2. Should the driver own the `oom_score` ?
