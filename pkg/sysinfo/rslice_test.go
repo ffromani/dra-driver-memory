@@ -70,8 +70,12 @@ func TestProcess(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name:       "memory-XXXXXX",
-							Attributes: attributesForNUMANode(int64(0)),
+							Name: "memory-XXXXXX",
+							Attributes: makeAttributes(attrInfo{
+								numaNode: 0,
+								sizeName: "4k",
+								hugeTLB:  false,
+							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 								"memory": {
 									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
@@ -84,8 +88,12 @@ func TestProcess(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name:       "hugepages-2m-XXXXXX",
-							Attributes: attributesForNUMANode(int64(0)),
+							Name: "hugepages-2m-XXXXXX",
+							Attributes: makeAttributes(attrInfo{
+								numaNode: 0,
+								sizeName: "2m",
+								hugeTLB:  true,
+							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 								"pages": {
 									Value: *resource.NewQuantity(0, resource.DecimalSI),
@@ -98,8 +106,12 @@ func TestProcess(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name:       "hugepages-1g-XXXXXX",
-							Attributes: attributesForNUMANode(int64(0)),
+							Name: "hugepages-1g-XXXXXX",
+							Attributes: makeAttributes(attrInfo{
+								numaNode: 0,
+								sizeName: "1g",
+								hugeTLB:  true,
+							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 								"pages": {
 									Value: *resource.NewQuantity(0, resource.DecimalSI),
@@ -136,14 +148,5 @@ func TestProcess(t *testing.T) {
 				t.Errorf("unexpected deviceToNode mapping: %s", diff)
 			}
 		})
-	}
-}
-
-func attributesForNUMANode(numaNode int64) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
-	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		"resource.kubernetes.io/numaNode": {IntValue: ptr.To(numaNode)},
-		"dra.cpu/numaNode":                {IntValue: ptr.To(numaNode)},
-		"dra.memory/numaNode":             {IntValue: ptr.To(numaNode)},
-		"dra.net/numaNode":                {IntValue: ptr.To(numaNode)},
 	}
 }

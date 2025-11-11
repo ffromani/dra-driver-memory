@@ -135,6 +135,7 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 				Err: fmt.Errorf("device %q not found in device mapping", alloc.Device),
 			}
 		}
+		lh.V(4).Info("prepareResourceClaim", "device", alloc.Device, "numaNode", numaNode)
 		claimNodes.Insert(numaNode)
 	}
 
