@@ -75,12 +75,8 @@ func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[st
 
 		memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
 		memDevice := resourceapi.Device{
-			Name: MakeDeviceName("memory", numaNode),
-			Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-				"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
-				"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
-				"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
-			},
+			Name:       MakeDeviceName("memory", numaNode),
+			Attributes: makeCommonAttributes(numaNode),
 			Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 				"memory": {
 					Value: *memQty,
@@ -102,12 +98,8 @@ func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[st
 			hpBasename := hugepageNameBySizeInBytes(hpSize)
 			hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
 			hpDevice := resourceapi.Device{
-				Name: MakeDeviceName(hpBasename, numaNode),
-				Attributes: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-					"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
-					"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
-					"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
-				},
+				Name:       MakeDeviceName(hpBasename, numaNode),
+				Attributes: makeCommonAttributes(numaNode),
 				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 					"pages": {
 						Value: *hpQty,
@@ -143,4 +135,14 @@ func hugepageNameBySizeInBytes(sizeInBytes uint64) string {
 		return "hugepages-1g"
 	}
 	return fmt.Sprintf("hugepages-%dk", sizeInKB) // should never happen
+}
+
+func makeCommonAttributes(numaNode int64) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	pNode := ptr.To(numaNode)
+	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+		"resource.kubernetes.io/numaNode": {IntValue: pNode},
+		"dra.memory/numaNode":             {IntValue: pNode},
+		"dra.cpu/numaNode":                {IntValue: pNode},
+		"dra.net/numaNode":                {IntValue: pNode},
+	}
 }

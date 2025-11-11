@@ -137,8 +137,9 @@ func TestProcess(t *testing.T) {
 
 func attributesForNUMANode(numaNode int64) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		"dra.cpu/numaNode":    {IntValue: ptr.To(numaNode)},
-		"dra.memory/numaNode": {IntValue: ptr.To(numaNode)},
-		"dra.net/numaNode":    {IntValue: ptr.To(numaNode)},
+		"resource.kubernetes.io/numaNode": {IntValue: ptr.To(numaNode)},
+		"dra.cpu/numaNode":                {IntValue: ptr.To(numaNode)},
+		"dra.memory/numaNode":             {IntValue: ptr.To(numaNode)},
+		"dra.net/numaNode":                {IntValue: ptr.To(numaNode)},
 	}
 }
