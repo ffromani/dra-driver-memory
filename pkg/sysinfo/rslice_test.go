@@ -93,6 +93,10 @@ func TestProcess(t *testing.T) {
 							},
 							AllowMultipleAllocations: ptr.To(true),
 						},
+					},
+				},
+				{
+					Devices: []resourceapi.Device{
 						{
 							Name:       "hugepages-1g-XXXXXX",
 							Attributes: attributesForNUMANode(int64(0)),

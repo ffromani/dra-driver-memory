@@ -56,7 +56,6 @@ func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
-
 			mdrv.nodeName: {
 				Slices: slices,
 			},

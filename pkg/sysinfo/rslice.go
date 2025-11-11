@@ -18,6 +18,7 @@ package sysinfo
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/go-logr/logr"
@@ -59,68 +60,85 @@ var MakeDeviceName = func(devName string, _ int64) string {
 	return devName + "-" + k8srand.String(6)
 }
 
+const memBasename = "memory"
+
+type descriptor struct {
+	deviceNameToNUMANode map[string]int64
+	deviceClassToSlices  map[string]resourceslice.Slice
+}
+
 // Process processes MachineData and creates resource slices out of it, plus a device:numaNode mapping.
 // This function cannot really fail and never returns invalid data but it can return empty data.
 func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[string]int64) {
-	deviceNameToNUMANode := make(map[string]int64)
-	memorySlice := resourceslice.Slice{}
-	hugepageSlice := resourceslice.Slice{}
+	desc := descriptor{
+		deviceNameToNUMANode: make(map[string]int64),
+		deviceClassToSlices:  make(map[string]resourceslice.Slice),
+	}
 
 	for numaNode, nodeInfo := range machine.Zones {
 		if nodeInfo.Memory == nil {
 			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
 			continue
 		}
-		numaNode := int64(numaNode)
-
-		memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
-		memDevice := resourceapi.Device{
-			Name:       MakeDeviceName("memory", numaNode),
-			Attributes: makeCommonAttributes(numaNode),
-			Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-				"memory": {
-					Value: *memQty,
-				},
-			},
-			AllowMultipleAllocations: ptr.To(true),
-		}
-		memorySlice.Devices = append(memorySlice.Devices, memDevice)
-		deviceNameToNUMANode[memDevice.Name] = numaNode
-
-		var sizeInBytes []uint64
-		for sz := range nodeInfo.Memory.HugePageAmountsBySize {
-			sizeInBytes = append(sizeInBytes, sz)
-		}
-		slices.Sort(sizeInBytes)
-
-		for _, hpSize := range sizeInBytes {
-			amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
-			hpBasename := hugepageNameBySizeInBytes(hpSize)
-			hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
-			hpDevice := resourceapi.Device{
-				Name:       MakeDeviceName(hpBasename, numaNode),
-				Attributes: makeCommonAttributes(numaNode),
-				Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-					"pages": {
-						Value: *hpQty,
-					},
-				},
-				AllowMultipleAllocations: ptr.To(true),
-			}
-			hugepageSlice.Devices = append(hugepageSlice.Devices, hpDevice)
-			deviceNameToNUMANode[hpDevice.Name] = numaNode
+		processMemory(lh, &desc, int64(numaNode), nodeInfo)
+		for _, hpSize := range sortedHugepageSizes(nodeInfo) {
+			processHugepages(lh, &desc, hpSize, int64(numaNode), nodeInfo)
 		}
 	}
 
 	if lh.V(4).Enabled() {
-		for devName, numaNode := range deviceNameToNUMANode {
+		for devName, numaNode := range desc.deviceNameToNUMANode {
 			lh.V(4).Info("Devices mapping", "device", devName, "NUMANode", numaNode)
 		}
 	}
-	return []resourceslice.Slice{
-		memorySlice,
-		hugepageSlice,
-	}, deviceNameToNUMANode
+	return slices.Collect(maps.Values(desc.deviceClassToSlices)), desc.deviceNameToNUMANode
+}
+
+func sortedHugepageSizes(nodeInfo Zone) []uint64 {
+	var sizeInBytes []uint64
+	for sz := range nodeInfo.Memory.HugePageAmountsBySize {
+		sizeInBytes = append(sizeInBytes, sz)
+	}
+	slices.Sort(sizeInBytes)
+	return sizeInBytes
+}
+
+func processMemory(lh logr.Logger, desc *descriptor, numaNode int64, nodeInfo Zone) {
+	memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
+	memDevice := resourceapi.Device{
+		Name:       MakeDeviceName(memBasename, numaNode),
+		Attributes: makeCommonAttributes(numaNode),
+		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
+			"memory": {
+				Value: *memQty,
+			},
+		},
+		AllowMultipleAllocations: ptr.To(true),
+	}
+	desc.deviceNameToNUMANode[memDevice.Name] = numaNode
+	memorySlice := desc.deviceClassToSlices[memBasename]
+	memorySlice.Devices = append(memorySlice.Devices, memDevice)
+	desc.deviceClassToSlices[memBasename] = memorySlice
+}
+
+func processHugepages(lh logr.Logger, desc *descriptor, hpSize uint64, numaNode int64, nodeInfo Zone) {
+	amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
+	hpBasename := hugepageNameBySizeInBytes(hpSize)
+	hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
+	hpDevice := resourceapi.Device{
+		Name:       MakeDeviceName(hpBasename, numaNode),
+		Attributes: makeCommonAttributes(numaNode),
+		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
+			"pages": {
+				Value: *hpQty,
+			},
+		},
+		AllowMultipleAllocations: ptr.To(true),
+	}
+	desc.deviceNameToNUMANode[hpDevice.Name] = numaNode
+	hugepageSlice := desc.deviceClassToSlices[hpBasename]
+	hugepageSlice.Devices = append(hugepageSlice.Devices, hpDevice)
+	desc.deviceClassToSlices[hpBasename] = hugepageSlice
 }
 
 // TODO: only amd64 supported atm
