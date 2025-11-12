@@ -80,7 +80,7 @@ func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[st
 			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
 			continue
 		}
-		processMemory(lh, &desc, int64(numaNode), nodeInfo)
+		processMemory(lh, &desc, uint64(machine.Pagesize), int64(numaNode), nodeInfo)
 		for _, hpSize := range sortedHugepageSizes(nodeInfo) {
 			processHugepages(lh, &desc, hpSize, int64(numaNode), nodeInfo)
 		}
@@ -103,11 +103,15 @@ func sortedHugepageSizes(nodeInfo Zone) []uint64 {
 	return sizeInBytes
 }
 
-func processMemory(lh logr.Logger, desc *descriptor, numaNode int64, nodeInfo Zone) {
+func processMemory(lh logr.Logger, desc *descriptor, pageSize uint64, numaNode int64, nodeInfo Zone) {
 	memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
 	memDevice := resourceapi.Device{
-		Name:       MakeDeviceName(memBasename, numaNode),
-		Attributes: makeCommonAttributes(numaNode),
+		Name: MakeDeviceName(memBasename, numaNode),
+		Attributes: makeAttributes(attrInfo{
+			numaNode: numaNode,
+			sizeName: pagesizeToString(pageSize),
+			hugeTLB:  false,
+		}),
 		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 			"memory": {
 				Value: *memQty,
@@ -123,11 +127,16 @@ func processMemory(lh logr.Logger, desc *descriptor, numaNode int64, nodeInfo Zo
 
 func processHugepages(lh logr.Logger, desc *descriptor, hpSize uint64, numaNode int64, nodeInfo Zone) {
 	amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
-	hpBasename := hugepageNameBySizeInBytes(hpSize)
+	hpSizeName := hugepageSizeToString(hpSize)
+	hpBasename := "hugepages-" + hpSizeName
 	hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
 	hpDevice := resourceapi.Device{
-		Name:       MakeDeviceName(hpBasename, numaNode),
-		Attributes: makeCommonAttributes(numaNode),
+		Name: MakeDeviceName(hpBasename, numaNode),
+		Attributes: makeAttributes(attrInfo{
+			numaNode: numaNode,
+			sizeName: hpSizeName,
+			hugeTLB:  true,
+		}),
 		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 			"pages": {
 				Value: *hpQty,
@@ -141,26 +150,42 @@ func processHugepages(lh logr.Logger, desc *descriptor, hpSize uint64, numaNode 
 	desc.deviceClassToSlices[hpBasename] = hugepageSlice
 }
 
+func pagesizeToString(sizeInBytes uint64) string {
+	return fmt.Sprintf("%dk", sizeInBytes/1024)
+}
+
 // TODO: only amd64 supported atm
 // NOTE: need to be a lowercase RFC 1123 label
-func hugepageNameBySizeInBytes(sizeInBytes uint64) string {
+func hugepageSizeToString(sizeInBytes uint64) string {
 	sizeInKB := sizeInBytes / 1024
 	if sizeInKB == 2048 {
-		return "hugepages-2m"
+		return "2m"
 	}
 	sizeInMB := sizeInKB / 1024
 	if sizeInMB == 1024 {
-		return "hugepages-1g"
+		return "1g"
 	}
-	return fmt.Sprintf("hugepages-%dk", sizeInKB) // should never happen
+	return fmt.Sprintf("%dk", sizeInKB) // should never happen
 }
 
-func makeCommonAttributes(numaNode int64) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
-	pNode := ptr.To(numaNode)
+type attrInfo struct {
+	numaNode int64
+	sizeName string
+	hugeTLB  bool
+}
+
+func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	pNode := ptr.To(info.numaNode)
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+		// alignment compatibility: dra-driver-sriov
 		"resource.kubernetes.io/numaNode": {IntValue: pNode},
-		"dra.memory/numaNode":             {IntValue: pNode},
-		"dra.cpu/numaNode":                {IntValue: pNode},
-		"dra.net/numaNode":                {IntValue: pNode},
+		// alignment compatibility: dra-driver-cpu
+		"dra.cpu/numaNode": {IntValue: pNode},
+		// alignment compatibility: dranet
+		"dra.net/numaNode": {IntValue: pNode},
+		// our own attributes, at last
+		"dra.memory/numaNode": {IntValue: pNode},
+		"dra.memory/pageSize": {StringValue: ptr.To(info.sizeName)},
+		"dra.memory/hugeTLB":  {BoolValue: ptr.To(info.hugeTLB)},
 	}
 }

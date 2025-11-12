@@ -197,7 +197,8 @@ metadata:
 spec:
   selectors:
     - cel:
-        expression: device.driver == "dra.memory"
+        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
+          == "4k" && device.attributes["dra.memory"].hugeTLB == false
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -206,7 +207,8 @@ metadata:
 spec:
   selectors:
     - cel:
-        expression: device.driver == "dra.memory"
+        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
+          == "2m" && device.attributes["dra.memory"].hugeTLB == true
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -215,4 +217,5 @@ metadata:
 spec:
   selectors:
     - cel:
-        expression: device.driver == "dra.memory"
+        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
+          == "1g" && device.attributes["dra.memory"].hugeTLB == true

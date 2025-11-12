@@ -135,6 +135,7 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 				Err: fmt.Errorf("device %q not found in device mapping", alloc.Device),
 			}
 		}
+		lh.V(2).Info("prepareResourceClaim", "pool", alloc.Pool, "device", alloc.Device, "numaNode", numaNode)
 		claimNodes.Insert(numaNode)
 	}
 
@@ -152,7 +153,7 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 	}
 
 	qualifiedName := cdiparser.QualifiedName(cdi.Vendor, cdi.Class, deviceName)
-	lh.V(2).Info("CDI data", "DeviceName", deviceName, "envVar", envVar, "qualifiedName", qualifiedName)
+	lh.V(4).Info("CDI data", "DeviceName", deviceName, "envVar", envVar, "qualifiedName", qualifiedName)
 
 	preparedDevices := []kubeletplugin.Device{}
 	for _, allocResult := range claim.Status.Allocation.Devices.Results {

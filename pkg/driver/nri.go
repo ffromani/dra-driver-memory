@@ -31,7 +31,7 @@ import (
 // are already done and this layer "just" needs to enforce them.
 
 func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
-	lh, _ := logr.FromContext(ctx)
+	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
@@ -64,6 +64,12 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
+
+	// TODO: enforce hugepage limits
+
+	for _, hp := range ctr.GetLinux().GetResources().GetHugepageLimits() {
+		lh.V(4).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
+	}
 
 	return adjust, updates, nil
 }
