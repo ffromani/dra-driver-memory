@@ -38,7 +38,6 @@ func main() {
 	params := command.DefaultParams()
 	params.InitFlags()
 	params.ParseFlags()
-	params.DumpFlags(setupLogger)
 
 	logger, err := command.MakeLogger(setupLogger)
 	if err != nil {
@@ -78,6 +77,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	params.DumpFlags(logger)
 	if err := command.RunDaemon(ctx, params, logger); err != nil {
 		logger.Error(err, "daemon failed")
 		os.Exit(1)
