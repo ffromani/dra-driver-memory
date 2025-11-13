@@ -17,7 +17,6 @@
 package sysinfo
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 
@@ -28,8 +27,11 @@ import (
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/utils/ptr"
+
+	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 type Zone struct {
@@ -55,24 +57,33 @@ type MachineData struct {
 	Zones    []Zone `json:"zones"`
 }
 
-// enables testing
-var MakeDeviceName = func(devName string, _ int64) string {
-	return devName + "-" + k8srand.String(6)
+type ResourceInfo struct {
+	spanByDeviceName   map[string]types.Span
+	deviceTypeToSlices map[string]resourceslice.Slice
 }
 
-const memBasename = "memory"
+func (ri ResourceInfo) GetResourceSlices() []resourceslice.Slice {
+	return slices.Collect(maps.Values(ri.deviceTypeToSlices))
+}
 
-type descriptor struct {
-	deviceNameToNUMANode map[string]int64
-	deviceClassToSlices  map[string]resourceslice.Slice
+func (ri ResourceInfo) GetSpanByDeviceName() map[string]types.Span {
+	return ri.spanByDeviceName
+}
+
+func (ri ResourceInfo) GetResourceNames() sets.Set[string] {
+	var resourceNames sets.Set[string]
+	for span := range maps.Values(ri.spanByDeviceName) {
+		resourceNames.Insert(span.Name())
+	}
+	return resourceNames
 }
 
 // Process processes MachineData and creates resource slices out of it, plus a device:numaNode mapping.
 // This function cannot really fail and never returns invalid data but it can return empty data.
-func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[string]int64) {
-	desc := descriptor{
-		deviceNameToNUMANode: make(map[string]int64),
-		deviceClassToSlices:  make(map[string]resourceslice.Slice),
+func Process(lh logr.Logger, machine MachineData) ResourceInfo {
+	info := ResourceInfo{
+		spanByDeviceName:   make(map[string]types.Span),
+		deviceTypeToSlices: make(map[string]resourceslice.Slice),
 	}
 
 	for numaNode, nodeInfo := range machine.Zones {
@@ -80,18 +91,18 @@ func Process(lh logr.Logger, machine MachineData) ([]resourceslice.Slice, map[st
 			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
 			continue
 		}
-		processMemory(lh, &desc, uint64(machine.Pagesize), int64(numaNode), nodeInfo)
+		processMemory(lh, &info, uint64(machine.Pagesize), int64(numaNode), nodeInfo)
 		for _, hpSize := range sortedHugepageSizes(nodeInfo) {
-			processHugepages(lh, &desc, hpSize, int64(numaNode), nodeInfo)
+			processHugepages(lh, &info, hpSize, int64(numaNode), nodeInfo)
 		}
 	}
 
 	if lh.V(4).Enabled() {
-		for devName, numaNode := range desc.deviceNameToNUMANode {
-			lh.V(4).Info("Devices mapping", "device", devName, "NUMANode", numaNode)
+		for devName, devSpan := range info.spanByDeviceName {
+			lh.V(4).Info("Devices mapping", "device", devName, "deviceType", devSpan.Name(), "NUMANode", devSpan.NUMAZone)
 		}
 	}
-	return slices.Collect(maps.Values(desc.deviceClassToSlices)), desc.deviceNameToNUMANode
+	return info
 }
 
 func sortedHugepageSizes(nodeInfo Zone) []uint64 {
@@ -103,79 +114,41 @@ func sortedHugepageSizes(nodeInfo Zone) []uint64 {
 	return sizeInBytes
 }
 
-func processMemory(lh logr.Logger, desc *descriptor, pageSize uint64, numaNode int64, nodeInfo Zone) {
-	memQty := resource.NewQuantity(nodeInfo.Memory.TotalUsableBytes, resource.DecimalSI)
-	memDevice := resourceapi.Device{
-		Name: MakeDeviceName(memBasename, numaNode),
-		Attributes: makeAttributes(attrInfo{
-			numaNode: numaNode,
-			sizeName: pagesizeToString(pageSize),
-			hugeTLB:  false,
-		}),
-		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-			"memory": {
-				Value: *memQty,
-			},
+func processMemory(lh logr.Logger, info *ResourceInfo, pageSize uint64, numaNode int64, nodeInfo Zone) {
+	span := types.Span{
+		ResourceIdent: types.ResourceIdent{
+			Kind:     types.Memory,
+			Pagesize: pageSize,
 		},
-		AllowMultipleAllocations: ptr.To(true),
+		Amount:   nodeInfo.Memory.TotalUsableBytes,
+		NUMAZone: numaNode,
 	}
-	desc.deviceNameToNUMANode[memDevice.Name] = numaNode
-	memorySlice := desc.deviceClassToSlices[memBasename]
+	memDevice := ToDevice(span)
+	info.spanByDeviceName[memDevice.Name] = span
+	memorySlice := info.deviceTypeToSlices[span.Name()]
 	memorySlice.Devices = append(memorySlice.Devices, memDevice)
-	desc.deviceClassToSlices[memBasename] = memorySlice
+	info.deviceTypeToSlices[span.Name()] = memorySlice
 }
 
-func processHugepages(lh logr.Logger, desc *descriptor, hpSize uint64, numaNode int64, nodeInfo Zone) {
+func processHugepages(lh logr.Logger, info *ResourceInfo, hpSize uint64, numaNode int64, nodeInfo Zone) {
 	amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
-	hpSizeName := hugepageSizeToString(hpSize)
-	hpBasename := "hugepages-" + hpSizeName
-	hpQty := resource.NewQuantity(amounts.Total, resource.DecimalSI)
-	hpDevice := resourceapi.Device{
-		Name: MakeDeviceName(hpBasename, numaNode),
-		Attributes: makeAttributes(attrInfo{
-			numaNode: numaNode,
-			sizeName: hpSizeName,
-			hugeTLB:  true,
-		}),
-		Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-			"pages": {
-				Value: *hpQty,
-			},
+	span := types.Span{
+		ResourceIdent: types.ResourceIdent{
+			Kind:     types.Hugepages,
+			Pagesize: hpSize,
 		},
-		AllowMultipleAllocations: ptr.To(true),
+		Amount:   amounts.Total,
+		NUMAZone: numaNode,
 	}
-	desc.deviceNameToNUMANode[hpDevice.Name] = numaNode
-	hugepageSlice := desc.deviceClassToSlices[hpBasename]
+	hpDevice := ToDevice(span)
+	info.spanByDeviceName[hpDevice.Name] = span
+	hugepageSlice := info.deviceTypeToSlices[span.Name()]
 	hugepageSlice.Devices = append(hugepageSlice.Devices, hpDevice)
-	desc.deviceClassToSlices[hpBasename] = hugepageSlice
+	info.deviceTypeToSlices[span.Name()] = hugepageSlice
 }
 
-func pagesizeToString(sizeInBytes uint64) string {
-	return fmt.Sprintf("%dk", sizeInBytes/1024)
-}
-
-// TODO: only amd64 supported atm
-// NOTE: need to be a lowercase RFC 1123 label
-func hugepageSizeToString(sizeInBytes uint64) string {
-	sizeInKB := sizeInBytes / 1024
-	if sizeInKB == 2048 {
-		return "2m"
-	}
-	sizeInMB := sizeInKB / 1024
-	if sizeInMB == 1024 {
-		return "1g"
-	}
-	return fmt.Sprintf("%dk", sizeInKB) // should never happen
-}
-
-type attrInfo struct {
-	numaNode int64
-	sizeName string
-	hugeTLB  bool
-}
-
-func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
-	pNode := ptr.To(info.numaNode)
+func MakeAttributes(sp types.Span) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	pNode := ptr.To(sp.NUMAZone)
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 		// alignment compatibility: dra-driver-sriov
 		"resource.kubernetes.io/numaNode": {IntValue: pNode},
@@ -185,7 +158,37 @@ func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.Dev
 		"dra.net/numaNode": {IntValue: pNode},
 		// our own attributes, at last
 		"dra.memory/numaNode": {IntValue: pNode},
-		"dra.memory/pageSize": {StringValue: ptr.To(info.sizeName)},
-		"dra.memory/hugeTLB":  {BoolValue: ptr.To(info.hugeTLB)},
+		"dra.memory/pageSize": {StringValue: ptr.To(sp.PagesizeString())},
+		"dra.memory/hugeTLB":  {BoolValue: ptr.To(sp.NeedsHugeTLB())},
 	}
+}
+
+func MakeCapacity(sp types.Span) map[resourceapi.QualifiedName]resourceapi.DeviceCapacity {
+	name := sp.CapacityName()
+	qty := resource.NewQuantity(sp.Amount, resource.DecimalSI)
+	return map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
+		name: {
+			Value: *qty,
+		},
+	}
+}
+
+func ToDevice(sp types.Span) resourceapi.Device {
+	return resourceapi.Device{
+		Name:                     MakeDeviceName(sp.Name()),
+		Attributes:               MakeAttributes(sp),
+		Capacity:                 MakeCapacity(sp),
+		AllowMultipleAllocations: ptr.To(true),
+	}
+}
+
+// MakeDeviceName creates a unique short device name from the base device name ("memory", "hugepages-2m")
+// We use a random part because the device name is not really that relevant, as long as it's unique.
+// We can very much construct it concatenating nodeName and NUMAZoneID, that would be unique and equally
+// valid as we expose plenty of low-level details like the NUMAZoneID anyway, but the concern is that
+// we would need more validation, e.g, translating the nodeName (dots->dashes) and so on.
+// Since users are expected to select memory devices by attribute and not by name, we just use a
+// random suffix for the time being and move on.
+var MakeDeviceName = func(devName string) string {
+	return devName + "-" + k8srand.String(6)
 }

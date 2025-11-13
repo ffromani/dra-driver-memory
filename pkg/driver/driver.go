@@ -26,14 +26,17 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/go-logr/logr"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/klog/v2"
 
+	"github.com/ffromani/dra-driver-memory/pkg/alloc"
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 // This is the orchestration layer. All the sub-components (DRA layer, NRI layer, CDI manager...)
@@ -57,15 +60,18 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName           string
-	nodeName             string
-	kubeClient           kubernetes.Interface
-	draPlugin            KubeletPlugin
-	nriPlugin            stub.Stub
-	cdiMgr               *cdi.Manager
-	logger               logr.Logger
-	sysinformer          SysinfoDiscoverer
-	deviceNameToNUMANode map[string]int64
+	driverName  string
+	nodeName    string
+	kubeClient  kubernetes.Interface
+	draPlugin   KubeletPlugin
+	nriPlugin   stub.Stub
+	cdiMgr      *cdi.Manager
+	logger      logr.Logger
+	sysinformer SysinfoDiscoverer
+	// which device represent which span?
+	spanByDeviceName map[string]types.Span
+	resourceNames    sets.Set[string]
+	allocMgr         *alloc.Manager
 }
 
 type SysinfoVerifier interface {
@@ -91,12 +97,13 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		return nil, err
 	}
 	plugin := &MemoryDriver{
-		driverName:           env.DriverName,
-		nodeName:             env.NodeName,
-		kubeClient:           env.Clientset,
-		logger:               env.Logger.WithName(env.DriverName),
-		sysinformer:          env.SysDiscover,
-		deviceNameToNUMANode: make(map[string]int64),
+		driverName:       env.DriverName,
+		nodeName:         env.NodeName,
+		kubeClient:       env.Clientset,
+		logger:           env.Logger.WithName(env.DriverName),
+		sysinformer:      env.SysDiscover,
+		spanByDeviceName: make(map[string]types.Span),
+		allocMgr:         alloc.NewManager(),
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)
@@ -169,10 +176,21 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	return plugin, nil
 }
 
-func (cp *MemoryDriver) Stop() {
+func (mdrv *MemoryDriver) Stop() {
+	lh := mdrv.logger // alias
+	lh.V(3).Info("Driver stopping...")
 }
 
 // Shutdown is called when the runtime is shutting down.
-func (cp *MemoryDriver) Shutdown(_ context.Context) {
-	klog.Info("Runtime shutting down...")
+func (mdrv *MemoryDriver) Shutdown(ctx context.Context) {
+	lh := mdrv.logrFromContext(ctx)
+	lh.V(3).Info("Driver shutting down...")
+}
+
+func (mdrv *MemoryDriver) logrFromContext(ctx context.Context) logr.Logger {
+	lh, err := logr.FromContext(ctx)
+	if err != nil {
+		return mdrv.logger.WithName("nri")
+	}
+	return lh
 }

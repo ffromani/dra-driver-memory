@@ -21,7 +21,10 @@ import (
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
+	libcontainercgroups "github.com/opencontainers/cgroups"
 
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/utils/cpuset"
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
@@ -36,6 +39,7 @@ func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbo
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+	// TODO: restore the internal state
 	return nil, nil
 }
 
@@ -48,28 +52,37 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
 
-	claimAllocations, err := draenv.ToClaimAllocations(lh, ctr.Env)
+	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.resourceNames)
 	if err != nil {
 		lh.Error(err, "parsing DRA env for container")
 	}
 
-	if len(claimAllocations) == 0 {
+	if len(nodesByClaim) == 0 {
 		lh.V(4).Info("No memory pinning for container")
 		return adjust, updates, nil
 	}
 
+	lh.V(4).Info("extracted", "nodesByClaim", len(nodesByClaim), "allocsByClaim", len(allocsByClaim))
+
 	var numaNodes cpuset.CPUSet
-	for _, allocNodes := range claimAllocations {
-		numaNodes = numaNodes.Union(allocNodes)
+	for claimUID, claimNUMANodes := range nodesByClaim {
+		numaNodes = numaNodes.Union(claimNUMANodes)
+		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+	}
+	var allocs []types.Allocation
+	for claimUID, alloc := range allocsByClaim {
+		allocs = append(allocs, alloc)
+		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+	}
+
+	adjust.SetLinuxCPUSetMems(numaNodes.String())
+	for _, hpLimit := range hugepageLimitsFromAllocations(lh, allocs) {
+		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
 	}
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
-	adjust.SetLinuxCPUSetMems(numaNodes.String())
-
-	// TODO: enforce hugepage limits
-
 	for _, hp := range ctr.GetLinux().GetResources().GetHugepageLimits() {
-		lh.V(4).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
+		lh.V(2).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
 	}
 
 	return adjust, updates, nil
@@ -115,10 +128,33 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	return nil
 }
 
-func (mdrv *MemoryDriver) logrFromContext(ctx context.Context) logr.Logger {
-	lh, err := logr.FromContext(ctx)
-	if err != nil {
-		return mdrv.logger.WithName("nri")
+func hugepageLimitsFromAllocations(lh logr.Logger, allocs []types.Allocation) []runtimeapi.HugepageLimit {
+	var hugepageLimits []runtimeapi.HugepageLimit
+
+	for _, pageSize := range libcontainercgroups.HugePageSizes() {
+		hugepageLimits = append(hugepageLimits, runtimeapi.HugepageLimit{
+			PageSize: pageSize,
+			Limit:    uint64(0),
+		})
 	}
-	return lh
+
+	requiredHugepageLimits := map[string]uint64{}
+	for _, alloc := range allocs {
+		sizeString, err := v1helper.HugePageUnitSizeFromByteSize(int64(alloc.Pagesize))
+		if err != nil {
+			lh.V(2).Info("Size is invalid", "allocation", alloc.Name(), "err", err)
+			continue
+		}
+		requiredHugepageLimits[sizeString] = uint64(alloc.Amount)
+	}
+
+	for _, hugepageLimit := range hugepageLimits {
+		limit, exists := requiredHugepageLimits[hugepageLimit.PageSize]
+		if !exists {
+			continue
+		}
+		hugepageLimit.Limit = limit
+	}
+
+	return hugepageLimits
 }
