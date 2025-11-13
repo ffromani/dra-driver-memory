@@ -24,7 +24,8 @@ import (
 
 	"k8s.io/utils/cpuset"
 
-	"github.com/ffromani/dra-driver-memory/pkg/draenv"
+	"github.com/ffromani/dra-driver-memory/pkg/env"
+	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 // NRI is the actuation layer. Once we reach this point, all the allocation decisions

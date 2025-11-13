@@ -31,7 +31,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
-	"github.com/ffromani/dra-driver-memory/pkg/draenv"
+	"github.com/ffromani/dra-driver-memory/pkg/env"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
