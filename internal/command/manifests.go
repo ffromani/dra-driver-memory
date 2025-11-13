@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
-	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
+	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 func MakeManifests(params Params, setupLogger logr.Logger) error {
@@ -41,51 +41,48 @@ func MakeManifests(params Params, setupLogger logr.Logger) error {
 		}
 		hpSizes.Insert(zone.Memory.SupportedPageSizes...)
 	}
-	celExpr := fmt.Sprintf("device.driver == %q", driver.Name)
+
 	devClasses := []resourceapi.DeviceClass{}
-	devClasses = append(devClasses, resourceapi.DeviceClass{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "resource.k8s.io/v1",
-			Kind:       "DeviceClass",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "dra.memory",
-		},
-		Spec: resourceapi.DeviceClassSpec{
-			Selectors: []resourceapi.DeviceSelector{
-				{
-					CEL: &resourceapi.CELDeviceSelector{
-						Expression: celExpr,
-					},
-				},
-			},
-		},
-	})
+	memory := types.ResourceIdent{
+		Kind:     types.Memory,
+		Pagesize: uint64(machine.Pagesize),
+	}
+	devClasses = append(devClasses, deviceClass(driver.Name, memory))
 	for _, hpSize := range sets.List(hpSizes) {
-		count, hpUnit := unitconv.NarrowSize(hpSize)
-		hpName := fmt.Sprintf("hugepages-%d%s", count, unitconv.Minimize(hpUnit))
-		devClasses = append(devClasses, resourceapi.DeviceClass{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "resource.k8s.io/v1",
-				Kind:       "DeviceClass",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "dra." + hpName,
-			},
-			Spec: resourceapi.DeviceClassSpec{
-				Selectors: []resourceapi.DeviceSelector{
-					{
-						CEL: &resourceapi.CELDeviceSelector{
-							Expression: celExpr,
-						},
-					},
-				},
-			},
-		})
+		hugepage := types.ResourceIdent{
+			Kind:     types.Hugepages,
+			Pagesize: hpSize,
+		}
+		devClasses = append(devClasses, deviceClass(driver.Name, hugepage))
 	}
 	for _, devClass := range devClasses {
 		fmt.Println("---")
 		printYAML(devClass, setupLogger)
 	}
 	return nil
+}
+
+func deviceClass(driverName string, ri types.ResourceIdent) resourceapi.DeviceClass {
+	return resourceapi.DeviceClass{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "resource.k8s.io/v1",
+			Kind:       "DeviceClass",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "dra." + ri.Name(),
+		},
+		Spec: resourceapi.DeviceClassSpec{
+			Selectors: []resourceapi.DeviceSelector{
+				{
+					CEL: &resourceapi.CELDeviceSelector{
+						Expression: celExpr(driverName, ri),
+					},
+				},
+			},
+		},
+	}
+}
+
+func celExpr(driverName string, ri types.ResourceIdent) string {
+	return fmt.Sprintf("device.driver == %q && device.attributes[\"dra.memory\"].pageSize == %q && device.attributes[\"dra.memory\"].hugeTLB == %v", driverName, ri.PagesizeString(), ri.NeedsHugeTLB())
 }
