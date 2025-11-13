@@ -16,7 +16,11 @@
 
 package unitconv
 
-import "strings"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 const (
 	KB uint64 = 1000
@@ -58,28 +62,40 @@ func NarrowSize(size uint64) (uint64, string) {
 	return size, "B"
 }
 
-func AmountFor(size uint64) (uint64, string) {
-	if size < MiB {
-		return KiB, "KiB"
-	}
-	if size < GiB {
-		return MiB, "MiB"
-	}
-	if size < TiB {
-		return GiB, "GiB"
-	}
-	if size < PiB {
-		return TiB, "TiB"
-	}
-	if size < EiB {
-		return PiB, "PiB"
-	}
-	return EiB, "EiB"
-}
-
 func Minimize(unitName string) string {
 	if unitName == "" {
 		return ""
 	}
 	return strings.ToLower(string(unitName[0]))
+}
+
+func SizeInBytesToMinimizedString(sizeInBytes uint64) string {
+	value, unit := NarrowSize(sizeInBytes)
+	return strconv.FormatUint(value, 10) + Minimize(unit)
+}
+
+func MinimizedStringToSizeInBytes(sz string) (uint64, error) {
+	if len(sz) < 2 {
+		return 0, errors.New("malformed string: too small")
+	}
+	// NOTE: need to be a lowercase RFC 1123 label
+	mults := map[byte]uint64{
+		byte('k'): 1024,
+		byte('m'): 1024 * 1024,
+		byte('g'): 1024 * 1024 * 1024,
+		byte('t'): 1024 * 1024 * 1024 * 1024,
+		byte('p'): 1024 * 1024 * 1024 * 1024 * 1024,
+		byte('e'): 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+	}
+	unit := sz[len(sz)-1]
+	rval := sz[:len(sz)-1]
+	value, err := strconv.ParseUint(rval, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	mulp, ok := mults[unit]
+	if !ok {
+		return 0, fmt.Errorf("unsupported unit: %q", unit)
+	}
+	return value * mulp, nil
 }
