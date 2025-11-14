@@ -24,7 +24,10 @@ import (
 
 	"k8s.io/utils/cpuset"
 
-	"github.com/ffromani/dra-driver-memory/pkg/draenv"
+	"github.com/ffromani/dra-driver-memory/pkg/env"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/types"
+	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
 
 // NRI is the actuation layer. Once we reach this point, all the allocation decisions
@@ -35,6 +38,7 @@ func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbo
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+	// TODO: restore the internal state
 	return nil, nil
 }
 
@@ -47,28 +51,37 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
 
-	claimAllocations, err := draenv.ToClaimAllocations(lh, ctr.Env)
+	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.resourceNames)
 	if err != nil {
 		lh.Error(err, "parsing DRA env for container")
 	}
 
-	if len(claimAllocations) == 0 {
+	if len(nodesByClaim) == 0 {
 		lh.V(4).Info("No memory pinning for container")
 		return adjust, updates, nil
 	}
 
+	lh.V(4).Info("extracted", "nodesByClaim", len(nodesByClaim), "allocsByClaim", len(allocsByClaim))
+
 	var numaNodes cpuset.CPUSet
-	for _, allocNodes := range claimAllocations {
-		numaNodes = numaNodes.Union(allocNodes)
+	for claimUID, claimNUMANodes := range nodesByClaim {
+		numaNodes = numaNodes.Union(claimNUMANodes)
+		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+	}
+	var allocs []types.Allocation
+	for claimUID, alloc := range allocsByClaim {
+		allocs = append(allocs, alloc)
+		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+	}
+
+	adjust.SetLinuxCPUSetMems(numaNodes.String())
+	for _, hpLimit := range hugepageLimitsFromAllocations(lh, mdrv.machineData, allocs) {
+		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
 	}
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
-	adjust.SetLinuxCPUSetMems(numaNodes.String())
-
-	// TODO: enforce hugepage limits
-
 	for _, hp := range ctr.GetLinux().GetResources().GetHugepageLimits() {
-		lh.V(4).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
+		lh.V(2).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
 	}
 
 	return adjust, updates, nil
@@ -114,10 +127,44 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	return nil
 }
 
-func (mdrv *MemoryDriver) logrFromContext(ctx context.Context) logr.Logger {
-	lh, err := logr.FromContext(ctx)
-	if err != nil {
-		return mdrv.logger.WithName("nri")
+// hugepageLimit is a Plain-Old-Data struct we carry around to do our computations;
+// this way we can set `runtimeapi.HugepageLimit` once and avoid copies.
+type hugepageLimit struct {
+	// The value of PageSize has the format <size><unit-prefix>B (2MB, 1GB),
+	// and must match the <hugepagesize> of the corresponding control file found in `hugetlb.<hugepagesize>.limit_in_bytes`.
+	// The values of <unit-prefix> are intended to be parsed using base 1024("1KB" = 1024, "1MB" = 1048576, etc).
+	PageSize string
+	// limit in bytes of hugepagesize HugeTLB usage.
+	Limit uint64
+}
+
+func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []hugepageLimit {
+	var hugepageLimits []hugepageLimit
+
+	for _, hpSize := range machineData.Hugepagesizes {
+		hugepageLimits = append(hugepageLimits, hugepageLimit{
+			PageSize: unitconv.SizeInBytesToCGroupString(hpSize),
+			Limit:    uint64(0),
+		})
 	}
-	return lh
+
+	requiredHugepageLimits := map[string]uint64{}
+	for _, alloc := range allocs {
+		sizeString, err := unitconv.HugePageUnitSizeFromByteSize(int64(alloc.Pagesize))
+		if err != nil {
+			lh.V(2).Info("Size is invalid", "allocation", alloc.Name(), "err", err)
+			continue
+		}
+		requiredHugepageLimits[sizeString] = uint64(alloc.Amount)
+	}
+
+	for _, hugepageLimit := range hugepageLimits {
+		limit, exists := requiredHugepageLimits[hugepageLimit.PageSize]
+		if !exists {
+			continue
+		}
+		hugepageLimit.Limit = limit
+	}
+
+	return hugepageLimits
 }

@@ -23,29 +23,41 @@ import (
 	"github.com/go-logr/logr"
 	ghwopt "github.com/jaypipes/ghw/pkg/option"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
+	libcontainercgroups "github.com/opencontainers/cgroups"
 
 	"sigs.k8s.io/yaml"
 
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
 
-func Inspect(params Params, setupLogger logr.Logger) error {
-	machine, err := GetMachineData(params)
+func Inspect(params Params, logger logr.Logger) error {
+	machine, err := GetMachineData(params, logger)
 	if err != nil {
 		return err
 	}
-	printYAML(machine, setupLogger)
+	printYAML(machine, logger)
 	return nil
 }
 
-func GetMachineData(params Params) (sysinfo.MachineData, error) {
+func GetMachineData(params Params, logger logr.Logger) (sysinfo.MachineData, error) {
 	topo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
 	if err != nil {
 		return sysinfo.MachineData{}, err
 	}
+	var Hugepagesizes []uint64
+	for _, pageSize := range libcontainercgroups.HugePageSizes() {
+		sz, err := unitconv.CGroupStringToSizeInBytes(pageSize)
+		if err != nil {
+			logger.Error(err, "getting system huge page size")
+			continue
+		}
+		Hugepagesizes = append(Hugepagesizes, sz)
+	}
 	return sysinfo.MachineData{
-		Pagesize: os.Getpagesize(),
-		Zones:    sysinfo.FromNodes(topo.Nodes),
+		Pagesize:      uint64(os.Getpagesize()),
+		Hugepagesizes: Hugepagesizes,
+		Zones:         sysinfo.FromNodes(topo.Nodes),
 	}, nil
 }
 

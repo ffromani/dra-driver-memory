@@ -107,9 +107,6 @@ kind-cluster:  ## create kind cluster
 kind-load-image: build-image  ## load the current container image into kind
 	kind load docker-image ${IMAGE} --name ${CLUSTER_NAME}
 
-delete-kind-cluster: ## delete kind cluster
-	kind delete cluster --name ${CLUSTER_NAME}
-
 ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 	kind create cluster --name ${CLUSTER_NAME} --config hack/ci/kind-ci.yaml
 	kubectl label node ${CLUSTER_NAME}-worker node-role.kubernetes.io/worker=''

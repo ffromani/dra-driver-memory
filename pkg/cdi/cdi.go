@@ -33,7 +33,7 @@ const (
 	SpecVersion  = "0.8.0"
 	Vendor       = "dra.k8s.io"
 	Class        = "memory"
-	EnvVarPrefix = "DRA_MEMORY_NODES"
+	EnvVarPrefix = "DRAMEMORY"
 )
 
 var (
@@ -58,19 +58,14 @@ func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 	}
 
 	cdiKind := Vendor + "/" + Class
-	c := &Manager{
+	mgr := &Manager{
 		path:       path,
 		cdiKind:    cdiKind,
 		driverName: driverName,
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		initialSpec := &cdiSpec.Spec{
-			Version: SpecVersion,
-			Kind:    cdiKind,
-			Devices: []cdiSpec.Device{},
-		}
-		if err := c.writeSpecToFile(lh, initialSpec); err != nil {
+		if err := mgr.writeSpecToFile(lh, mgr.EmptySpec()); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
@@ -78,17 +73,17 @@ func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 	}
 
 	lh.Info("Initialized CDI file manager")
-	return c, nil
+	return mgr, nil
 }
 
 // AddDevice adds a device to the CDI spec file.
-func (c *Manager) AddDevice(lh logr.Logger, deviceName string, envVar string) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (mgr *Manager) AddDevice(lh logr.Logger, deviceName string, envVars ...string) error {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
 
-	lh = lh.WithName("cdi").WithValues("path", c.path, "device", deviceName)
+	lh = lh.WithName("cdi").WithValues("path", mgr.path, "device", deviceName)
 
-	spec, err := c.readSpecFromFile(lh)
+	spec, err := mgr.readSpecFromFile(lh)
 	if err != nil {
 		return err
 	}
@@ -98,24 +93,22 @@ func (c *Manager) AddDevice(lh logr.Logger, deviceName string, envVar string) er
 	newDevice := cdiSpec.Device{
 		Name: deviceName,
 		ContainerEdits: cdiSpec.ContainerEdits{
-			Env: []string{
-				envVar,
-			},
+			Env: envVars,
 		},
 	}
 
 	spec.Devices = append(spec.Devices, newDevice)
-	return c.writeSpecToFile(lh, spec)
+	return mgr.writeSpecToFile(lh, spec)
 }
 
 // RemoveDevice removes a device from the CDI spec file.
-func (c *Manager) RemoveDevice(lh logr.Logger, deviceName string) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (mgr *Manager) RemoveDevice(lh logr.Logger, deviceName string) error {
+	mgr.mutex.Lock()
+	defer mgr.mutex.Unlock()
 
-	lh = lh.WithName("cdi").WithValues("path", c.path, "device", deviceName)
+	lh = lh.WithName("cdi").WithValues("path", mgr.path, "device", deviceName)
 
-	spec, err := c.readSpecFromFile(lh)
+	spec, err := mgr.readSpecFromFile(lh)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // File already gone, nothing to do.
@@ -124,10 +117,23 @@ func (c *Manager) RemoveDevice(lh logr.Logger, deviceName string) error {
 	}
 
 	if removeDeviceFromSpec(spec, deviceName) {
-		return c.writeSpecToFile(lh, spec)
+		return mgr.writeSpecToFile(lh, spec)
 	}
 
 	return nil
+}
+
+func (mgr *Manager) EmptySpec() *cdiSpec.Spec {
+	return &cdiSpec.Spec{
+		Version: SpecVersion,
+		Kind:    mgr.cdiKind,
+		Devices: []cdiSpec.Device{},
+	}
+}
+
+func (mgr *Manager) GetSpec(lh logr.Logger) (*cdiSpec.Spec, error) {
+	lh = lh.WithName("cdi").WithValues("path", mgr.path)
+	return mgr.readSpecFromFile(lh)
 }
 
 func removeDeviceFromSpec(spec *cdiSpec.Spec, deviceName string) bool {

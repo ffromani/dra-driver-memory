@@ -17,6 +17,7 @@
 package sysinfo
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/go-logr/logr/testr"
@@ -31,11 +32,10 @@ import (
 
 func TestProcess(t *testing.T) {
 	type testcase struct {
-		name              string
-		machine           MachineData
-		makeDeviceName    func(string, int64) string
-		expectedSlices    []resourceslice.Slice
-		expectedDevToNode map[string]int64
+		name           string
+		machine        MachineData
+		makeDeviceName func(string) string
+		expectedSlices []resourceslice.Slice
 	}
 
 	testcases := []testcase{
@@ -63,22 +63,22 @@ func TestProcess(t *testing.T) {
 					},
 				},
 			},
-			makeDeviceName: func(devName string, _ int64) string {
+			makeDeviceName: func(devName string) string {
 				return devName + "-XXXXXX"
 			},
 			expectedSlices: []resourceslice.Slice{
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name: "memory-XXXXXX",
+							Name: "hugepages-1g-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "4k",
-								hugeTLB:  false,
+								sizeName: "1g",
+								hugeTLB:  true,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"memory": {
-									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
+								"pages": {
+									Value: *resource.NewQuantity(0, resource.DecimalSI),
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
@@ -106,15 +106,15 @@ func TestProcess(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name: "hugepages-1g-XXXXXX",
+							Name: "memory-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "1g",
-								hugeTLB:  true,
+								sizeName: "4k",
+								hugeTLB:  false,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"pages": {
-									Value: *resource.NewQuantity(0, resource.DecimalSI),
+								"memory": {
+									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
@@ -122,31 +122,52 @@ func TestProcess(t *testing.T) {
 					},
 				},
 			},
-			expectedDevToNode: map[string]int64{
-				"hugepages-1g-XXXXXX": 0,
-				"hugepages-2m-XXXXXX": 0,
-				"memory-XXXXXX":       0,
-			},
 		},
 	}
 
 	for _, tcase := range testcases {
 		t.Run(tcase.name, func(t *testing.T) {
 			saveMakeDeviceName := MakeDeviceName
-			defer func() {
+			t.Cleanup(func() {
 				MakeDeviceName = saveMakeDeviceName
-			}()
+			})
 			MakeDeviceName = tcase.makeDeviceName
 
 			logger := testr.New(t)
-			gotSlices, gotMap := Process(logger, tcase.machine)
+			rinfo := Process(logger, tcase.machine)
 
+			gotSlices := rinfo.GetResourceSlices()
+			// CRITICAL NOTE: this is deeply tied to the layout of the resource.
+			// at the same time there's no need to sort every time in `GetResourceSlices`,
+			// let alone add a sorted variant. So looks like this is the lesser evil.
+			sort.Slice(gotSlices, func(i, j int) bool {
+				return gotSlices[i].Devices[0].Name < gotSlices[j].Devices[0].Name
+			})
 			if diff := cmp.Diff(gotSlices, tcase.expectedSlices); diff != "" {
 				t.Errorf("unexpected resourceslice: %s", diff)
 			}
-			if diff := cmp.Diff(gotMap, tcase.expectedDevToNode); diff != "" {
-				t.Errorf("unexpected deviceToNode mapping: %s", diff)
-			}
 		})
+	}
+}
+
+type attrInfo struct {
+	numaNode int64
+	sizeName string
+	hugeTLB  bool
+}
+
+func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	pNode := ptr.To(info.numaNode)
+	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
+		// alignment compatibility: dra-driver-sriov
+		"resource.kubernetes.io/numaNode": {IntValue: pNode},
+		// alignment compatibility: dra-driver-cpu
+		"dra.cpu/numaNode": {IntValue: pNode},
+		// alignment compatibility: dranet
+		"dra.net/numaNode": {IntValue: pNode},
+		// our own attributes, at last
+		"dra.memory/numaNode": {IntValue: pNode},
+		"dra.memory/pageSize": {StringValue: ptr.To(info.sizeName)},
+		"dra.memory/hugeTLB":  {BoolValue: ptr.To(info.hugeTLB)},
 	}
 }
