@@ -26,16 +26,18 @@ import (
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/utils/ptr"
 )
 
 func TestProcess(t *testing.T) {
 	type testcase struct {
-		name           string
-		machine        MachineData
-		makeDeviceName func(string) string
-		expectedSlices []resourceslice.Slice
+		name             string
+		machine          MachineData
+		makeDeviceName   func(string) string
+		expectedResNames []string
+		expectedSlices   []resourceslice.Slice
 	}
 
 	testcases := []testcase{
@@ -66,6 +68,7 @@ func TestProcess(t *testing.T) {
 			makeDeviceName: func(devName string) string {
 				return devName + "-XXXXXX"
 			},
+			expectedResNames: []string{"hugepages-1g", "hugepages-2m", "memory"},
 			expectedSlices: []resourceslice.Slice{
 				{
 					Devices: []resourceapi.Device{
@@ -135,6 +138,11 @@ func TestProcess(t *testing.T) {
 
 			logger := testr.New(t)
 			rinfo := Process(logger, tcase.machine)
+
+			gotResNames := sets.List(rinfo.GetResourceNames())
+			if diff := cmp.Diff(gotResNames, tcase.expectedResNames); diff != "" {
+				t.Errorf("unexpected resourceslice: %s", diff)
+			}
 
 			gotSlices := rinfo.GetResourceSlices()
 			// CRITICAL NOTE: this is deeply tied to the layout of the resource.
