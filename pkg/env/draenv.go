@@ -46,9 +46,6 @@ func CreateSpan(_ logr.Logger, claimUID k8stypes.UID, resourceName string, amoun
 }
 
 func ExtractNUMANodesTo(lh logr.Logger, env string, numaNodesByClaim map[k8stypes.UID]cpuset.CPUSet) (bool, error) {
-	if !strings.HasPrefix(env, cdi.EnvVarPrefix) {
-		return false, nil // not something we concern about
-	}
 	parts := strings.SplitN(env, "=", 2)
 	if len(parts) != 2 {
 		return false, fmt.Errorf("malformed DRA env entry %q", env)
@@ -73,9 +70,6 @@ func ExtractNUMANodesTo(lh logr.Logger, env string, numaNodesByClaim map[k8stype
 }
 
 func ExtractAllocsTo(lh logr.Logger, env string, resourceNames sets.Set[string], allocsByClaim map[k8stypes.UID]types.Allocation) (bool, error) {
-	if !strings.HasPrefix(env, cdi.EnvVarPrefix) {
-		return false, nil // not something we concern about
-	}
 	parts := strings.SplitN(env, "=", 2)
 	if len(parts) != 2 {
 		return false, fmt.Errorf("malformed DRA env entry %q", env)
@@ -117,6 +111,9 @@ func ExtractAll(lh logr.Logger, envs []string, resourceNames sets.Set[string]) (
 	allocsByClaim := make(map[k8stypes.UID]types.Allocation)
 
 	for _, env := range envs {
+		if !strings.HasPrefix(env, cdi.EnvVarPrefix) {
+			continue
+		}
 		lh.V(4).Info("Parsing DRA env", "entry", env)
 		// we will ignore errors related to envs we didn't set: these are not significant
 		found, err := ExtractNUMANodesTo(lh, env, numaNodesByClaim)
