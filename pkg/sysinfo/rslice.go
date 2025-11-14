@@ -92,7 +92,7 @@ func Process(lh logr.Logger, machine MachineData) ResourceInfo {
 			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
 			continue
 		}
-		processMemory(lh, &info, uint64(machine.Pagesize), int64(numaNode), nodeInfo)
+		processMemory(lh, &info, machine.Pagesize, int64(numaNode), nodeInfo)
 		for _, hpSize := range sortedHugepageSizes(nodeInfo) {
 			processHugepages(lh, &info, hpSize, int64(numaNode), nodeInfo)
 		}

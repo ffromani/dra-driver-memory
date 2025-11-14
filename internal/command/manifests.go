@@ -45,7 +45,7 @@ func MakeManifests(params Params, logger logr.Logger) error {
 	devClasses := []resourceapi.DeviceClass{}
 	memory := types.ResourceIdent{
 		Kind:     types.Memory,
-		Pagesize: uint64(machine.Pagesize),
+		Pagesize: machine.Pagesize,
 	}
 	devClasses = append(devClasses, deviceClass(driver.Name, memory))
 	for _, hpSize := range sets.List(hpSizes) {
