@@ -36,7 +36,7 @@ func TestCreate(t *testing.T) {
 
 func TestRegisterUnregister(t *testing.T) {
 	claimAllocs := map[string]types.Allocation{
-		"memory": types.Allocation{
+		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
 				Pagesize: 4 * 1024,
@@ -57,7 +57,7 @@ func TestRegisterUnregister(t *testing.T) {
 
 func TestRegisterGetClones(t *testing.T) {
 	claimAllocs := map[string]types.Allocation{
-		"memory": types.Allocation{
+		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
 				Pagesize: 4 * 1024,
@@ -85,7 +85,7 @@ func TestRegisterGetClones(t *testing.T) {
 
 func TestRegisterUpdatesExistingData(t *testing.T) {
 	claimAllocs := map[string]types.Allocation{
-		"memory": types.Allocation{
+		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
 				Pagesize: 4 * 1024,
@@ -119,7 +119,7 @@ func TestRegisterUpdatesExistingData(t *testing.T) {
 
 func TestCannotDeleteIfUnbounded(t *testing.T) {
 	claimAllocs := map[string]types.Allocation{
-		"memory": types.Allocation{
+		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
 				Pagesize: 4 * 1024,
@@ -150,7 +150,7 @@ func TestUnregisterByPod(t *testing.T) {
 	mgr := NewManager()
 
 	mgr.RegisterClaim(k8stypes.UID("foo"), map[string]types.Allocation{
-		"memory": types.Allocation{
+		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
 				Pagesize: 4 * 1024,
@@ -162,7 +162,7 @@ func TestUnregisterByPod(t *testing.T) {
 	mgr.BindClaimToPod("pod-BBB", k8stypes.UID("foo"))
 
 	mgr.RegisterClaim(k8stypes.UID("bar"), map[string]types.Allocation{
-		"hugepages-2m": types.Allocation{
+		"hugepages-2m": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Hugepages,
 				Pagesize: 2 * 1024 * 1024,

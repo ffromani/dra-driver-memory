@@ -83,7 +83,7 @@ func TestCreateSpanRoundTrip(t *testing.T) {
 			amount:       8 * 2 * 1024 * 1024,
 			numaNode:     2,
 			expected: map[k8stypes.UID]types.Allocation{
-				k8stypes.UID("FOOBAR"): types.Allocation{
+				k8stypes.UID("FOOBAR"): {
 					ResourceIdent: types.ResourceIdent{
 						Kind:     types.Hugepages,
 						Pagesize: 2 * 1024 * 1024,
@@ -134,7 +134,7 @@ func TestExtractAll(t *testing.T) {
 				k8stypes.UID("FOOBAR"): cpuset.New(0),
 			},
 			expectedSpans: map[k8stypes.UID]types.Allocation{
-				k8stypes.UID("FOOBAR"): types.Allocation{
+				k8stypes.UID("FOOBAR"): {
 					ResourceIdent: types.ResourceIdent{
 						Kind:     types.Hugepages,
 						Pagesize: 1024 * 1024 * 1024,
