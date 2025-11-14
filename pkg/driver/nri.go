@@ -22,7 +22,6 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
 
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/utils/cpuset"
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
@@ -151,7 +150,7 @@ func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineDa
 
 	requiredHugepageLimits := map[string]uint64{}
 	for _, alloc := range allocs {
-		sizeString, err := v1helper.HugePageUnitSizeFromByteSize(int64(alloc.Pagesize))
+		sizeString, err := unitconv.HugePageUnitSizeFromByteSize(int64(alloc.Pagesize))
 		if err != nil {
 			lh.V(2).Info("Size is invalid", "allocation", alloc.Name(), "err", err)
 			continue
