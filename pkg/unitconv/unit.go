@@ -17,6 +17,7 @@
 package unitconv
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -89,6 +90,40 @@ func MinimizedStringToSizeInBytes(sz string) (uint64, error) {
 	}
 	unit := sz[len(sz)-1]
 	rval := sz[:len(sz)-1]
+	value, err := strconv.ParseUint(rval, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	mulp, ok := mults[unit]
+	if !ok {
+		return 0, fmt.Errorf("unsupported unit: %q", unit)
+	}
+	return value * mulp, nil
+}
+
+func SizeInBytesToCGroupString(sizeInBytes uint64) string {
+	/* translated from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/mm/hugetlb_cgroup.c?id=eff48ddeab782e35e58ccc8853f7386bbae9dec4#n574 */
+	if sizeInBytes >= (1 << 30) {
+		return fmt.Sprintf("%dGB", sizeInBytes>>30)
+	}
+	if sizeInBytes >= (1 << 20) {
+		return fmt.Sprintf("%dMB", sizeInBytes>>20)
+	}
+	return fmt.Sprintf("%dKB", sizeInBytes>>10)
+}
+
+func CGroupStringToSizeInBytes(cs string) (uint64, error) {
+	if len(cs) < 3 {
+		return 0, errors.New("malformed string: too small")
+	}
+	// NOTE: need to be a lowercase RFC 1123 label
+	mults := map[string]uint64{
+		"KB": 1024,
+		"MB": 1024 * 1024,
+		"GB": 1024 * 1024 * 1024,
+	}
+	unit := cs[len(cs)-2:]
+	rval := cs[:len(cs)-2]
 	value, err := strconv.ParseUint(rval, 10, 64)
 	if err != nil {
 		return 0, err

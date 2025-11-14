@@ -21,14 +21,15 @@ import (
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
-	libcontainercgroups "github.com/opencontainers/cgroups"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/utils/cpuset"
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
+	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
 
 // NRI is the actuation layer. Once we reach this point, all the allocation decisions
@@ -76,7 +77,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepageLimitsFromAllocations(lh, allocs) {
+	for _, hpLimit := range hugepageLimitsFromAllocations(lh, mdrv.machineData, allocs) {
 		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
 	}
 
@@ -128,12 +129,12 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	return nil
 }
 
-func hugepageLimitsFromAllocations(lh logr.Logger, allocs []types.Allocation) []runtimeapi.HugepageLimit {
+func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []runtimeapi.HugepageLimit {
 	var hugepageLimits []runtimeapi.HugepageLimit
 
-	for _, pageSize := range libcontainercgroups.HugePageSizes() {
+	for _, hpSize := range machineData.Hugepagesizes {
 		hugepageLimits = append(hugepageLimits, runtimeapi.HugepageLimit{
-			PageSize: pageSize,
+			PageSize: unitconv.SizeInBytesToCGroupString(hpSize),
 			Limit:    uint64(0),
 		})
 	}

@@ -53,8 +53,9 @@ func FromNodes(nodes []*ghwtopology.Node) []Zone {
 }
 
 type MachineData struct {
-	Pagesize int    `json:"pagesize"`
-	Zones    []Zone `json:"zones"`
+	Pagesize      uint64   `json:"page_size"`
+	Hugepagesizes []uint64 `json:"huge_page_sizes"`
+	Zones         []Zone   `json:"zones"`
 }
 
 type ResourceInfo struct {

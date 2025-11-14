@@ -60,18 +60,20 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName  string
-	nodeName    string
-	kubeClient  kubernetes.Interface
-	draPlugin   KubeletPlugin
-	nriPlugin   stub.Stub
-	cdiMgr      *cdi.Manager
-	logger      logr.Logger
+	driverName string
+	nodeName   string
+	logger     logr.Logger
+	kubeClient kubernetes.Interface
+	draPlugin  KubeletPlugin
+	nriPlugin  stub.Stub
+	cdiMgr     *cdi.Manager
+	allocMgr   *alloc.Manager
+	// todo factor in
 	sysinformer SysinfoDiscoverer
+	machineData sysinfo.MachineData
 	// which device represent which span?
 	spanByDeviceName map[string]types.Span
 	resourceNames    sets.Set[string]
-	allocMgr         *alloc.Manager
 }
 
 type SysinfoVerifier interface {

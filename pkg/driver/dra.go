@@ -58,6 +58,7 @@ func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 	// TODO: what about races?
 	mdrv.spanByDeviceName = resourceInfo.GetSpanByDeviceName()
 	mdrv.resourceNames = resourceInfo.GetResourceNames()
+	mdrv.machineData = machinedata
 
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{

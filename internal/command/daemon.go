@@ -125,7 +125,7 @@ func RunDaemon(ctx context.Context, params Params, drvLogger logr.Logger) error 
 			return sysinfo.Validate(drvLogger, params.ProcRoot)
 		}),
 		SysDiscover: SysinfoDiscovererFunc(func() (sysinfo.MachineData, error) {
-			return GetMachineData(params)
+			return GetMachineData(params, drvLogger)
 		}),
 	}
 	dramem, err := driver.Start(egCtx, driverEnv)

@@ -29,8 +29,8 @@ import (
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
-func MakeManifests(params Params, setupLogger logr.Logger) error {
-	machine, err := GetMachineData(params)
+func MakeManifests(params Params, logger logr.Logger) error {
+	machine, err := GetMachineData(params, logger)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func MakeManifests(params Params, setupLogger logr.Logger) error {
 	}
 	for _, devClass := range devClasses {
 		fmt.Println("---")
-		printYAML(devClass, setupLogger)
+		printYAML(devClass, logger)
 	}
 	return nil
 }
