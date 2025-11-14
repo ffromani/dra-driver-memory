@@ -102,7 +102,7 @@ func MinimizedStringToSizeInBytes(sz string) (uint64, error) {
 }
 
 func SizeInBytesToCGroupString(sizeInBytes uint64) string {
-	/* translated from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/mm/hugetlb_cgroup.c?id=eff48ddeab782e35e58ccc8853f7386bbae9dec4#n574 */
+	// translated from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/mm/hugetlb_cgroup.c?id=eff48ddeab782e35e58ccc8853f7386bbae9dec4#n574
 	if sizeInBytes >= (1 << 30) {
 		return fmt.Sprintf("%dGB", sizeInBytes>>30)
 	}
@@ -116,11 +116,10 @@ func CGroupStringToSizeInBytes(cs string) (uint64, error) {
 	if len(cs) < 3 {
 		return 0, errors.New("malformed string: too small")
 	}
-	// NOTE: need to be a lowercase RFC 1123 label
 	mults := map[string]uint64{
-		"KB": 1024,
-		"MB": 1024 * 1024,
-		"GB": 1024 * 1024 * 1024,
+		"KB": 1 << 10,
+		"MB": 1 << 20,
+		"GB": 1 << 30,
 	}
 	unit := cs[len(cs)-2:]
 	rval := cs[:len(cs)-2]

@@ -34,7 +34,7 @@ const (
 
 type ResourceIdent struct {
 	Kind     ResourceKind
-	Pagesize uint64
+	Pagesize uint64 //bytes
 }
 
 // name is in the form `memory-4k` or `hugepages-1g`

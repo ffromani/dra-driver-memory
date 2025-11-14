@@ -72,7 +72,7 @@ func (ri ResourceInfo) GetSpanByDeviceName() map[string]types.Span {
 }
 
 func (ri ResourceInfo) GetResourceNames() sets.Set[string] {
-	var resourceNames sets.Set[string]
+	resourceNames := sets.New[string]()
 	for span := range maps.Values(ri.spanByDeviceName) {
 		resourceNames.Insert(span.Name())
 	}
