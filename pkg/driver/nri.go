@@ -22,7 +22,6 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
 
-	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/utils/cpuset"
 
@@ -129,11 +128,22 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	return nil
 }
 
-func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []runtimeapi.HugepageLimit {
-	var hugepageLimits []runtimeapi.HugepageLimit
+// hugepageLimit is a Plain-Old-Data struct we carry around to do our computations;
+// this way we can set `runtimeapi.HugepageLimit` once and avoid copies.
+type hugepageLimit struct {
+	// The value of PageSize has the format <size><unit-prefix>B (2MB, 1GB),
+	// and must match the <hugepagesize> of the corresponding control file found in `hugetlb.<hugepagesize>.limit_in_bytes`.
+	// The values of <unit-prefix> are intended to be parsed using base 1024("1KB" = 1024, "1MB" = 1048576, etc).
+	PageSize string
+	// limit in bytes of hugepagesize HugeTLB usage.
+	Limit uint64
+}
+
+func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []hugepageLimit {
+	var hugepageLimits []hugepageLimit
 
 	for _, hpSize := range machineData.Hugepagesizes {
-		hugepageLimits = append(hugepageLimits, runtimeapi.HugepageLimit{
+		hugepageLimits = append(hugepageLimits, hugepageLimit{
 			PageSize: unitconv.SizeInBytesToCGroupString(hpSize),
 			Limit:    uint64(0),
 		})
