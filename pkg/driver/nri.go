@@ -20,14 +20,12 @@ import (
 	"context"
 
 	"github.com/containerd/nri/pkg/api"
-	"github.com/go-logr/logr"
 
 	"k8s.io/utils/cpuset"
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
-	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/hugepages"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
-	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
 
 // NRI is the actuation layer. Once we reach this point, all the allocation decisions
@@ -75,12 +73,12 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepageLimitsFromAllocations(lh, mdrv.machineData, allocs) {
+	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.machineData, allocs) {
 		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
 	}
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
-	for _, hp := range ctr.GetLinux().GetResources().GetHugepageLimits() {
+	for _, hp := range adjust.GetLinux().GetResources().GetHugepageLimits() {
 		lh.V(2).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
 	}
 
@@ -125,46 +123,4 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 	return nil
-}
-
-// hugepageLimit is a Plain-Old-Data struct we carry around to do our computations;
-// this way we can set `runtimeapi.HugepageLimit` once and avoid copies.
-type hugepageLimit struct {
-	// The value of PageSize has the format <size><unit-prefix>B (2MB, 1GB),
-	// and must match the <hugepagesize> of the corresponding control file found in `hugetlb.<hugepagesize>.limit_in_bytes`.
-	// The values of <unit-prefix> are intended to be parsed using base 1024("1KB" = 1024, "1MB" = 1048576, etc).
-	PageSize string
-	// limit in bytes of hugepagesize HugeTLB usage.
-	Limit uint64
-}
-
-func hugepageLimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []hugepageLimit {
-	var hugepageLimits []hugepageLimit
-
-	for _, hpSize := range machineData.Hugepagesizes {
-		hugepageLimits = append(hugepageLimits, hugepageLimit{
-			PageSize: unitconv.SizeInBytesToCGroupString(hpSize),
-			Limit:    uint64(0),
-		})
-	}
-
-	requiredHugepageLimits := map[string]uint64{}
-	for _, alloc := range allocs {
-		sizeString, err := unitconv.HugePageUnitSizeFromByteSize(int64(alloc.Pagesize))
-		if err != nil {
-			lh.V(2).Info("Size is invalid", "allocation", alloc.Name(), "err", err)
-			continue
-		}
-		requiredHugepageLimits[sizeString] = uint64(alloc.Amount)
-	}
-
-	for _, hugepageLimit := range hugepageLimits {
-		limit, exists := requiredHugepageLimits[hugepageLimit.PageSize]
-		if !exists {
-			continue
-		}
-		hugepageLimit.Limit = limit
-	}
-
-	return hugepageLimits
 }
