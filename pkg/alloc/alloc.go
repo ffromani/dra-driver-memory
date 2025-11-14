@@ -19,6 +19,8 @@ package alloc
 import (
 	"maps"
 
+	"github.com/go-logr/logr"
+
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -62,21 +64,27 @@ func (mgr *Manager) GetClaim(claimUID k8stypes.UID) (map[string]types.Allocation
 	return maps.Clone(allocs), true
 }
 
-func (mgr *Manager) BindClaimToPod(podId string, claimUID k8stypes.UID) {
+func (mgr *Manager) BindClaimToPod(lh logr.Logger, podId string, claimUID k8stypes.UID) {
 	claimUIDs, ok := mgr.claimsByPodId[podId]
 	if !ok {
+		lh.V(4).Info("claim bound", "pod", podId, "claim", claimUID)
 		mgr.claimsByPodId[podId] = sets.New(claimUID)
 		return
 	}
+	if claimUIDs.Has(claimUID) {
+		return // minimize work and logging
+	}
 	claimUIDs.Insert(claimUID)
 	mgr.claimsByPodId[podId] = claimUIDs
+	lh.V(4).Info("claim bound", "pod", podId, "claim", claimUID)
 }
 
-func (mgr *Manager) UnregisterClaimsForPod(podId string) {
+func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podId string) {
 	claimUIDs, ok := mgr.claimsByPodId[podId]
 	if !ok {
 		return
 	}
+	lh.V(4).Info("unbinding claims", "pod", podId, "claims", claimUIDs.Len())
 	for _, claimUID := range claimUIDs.UnsortedList() {
 		mgr.UnregisterClaim(claimUID)
 	}

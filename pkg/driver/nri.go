@@ -64,12 +64,12 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	var numaNodes cpuset.CPUSet
 	for claimUID, claimNUMANodes := range nodesByClaim {
 		numaNodes = numaNodes.Union(claimNUMANodes)
-		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+		mdrv.allocMgr.BindClaimToPod(lh, pod.Id, claimUID)
 	}
 	var allocs []types.Allocation
 	for claimUID, alloc := range allocsByClaim {
 		allocs = append(allocs, alloc)
-		mdrv.allocMgr.BindClaimToPod(pod.Id, claimUID)
+		mdrv.allocMgr.BindClaimToPod(lh, pod.Id, claimUID)
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
@@ -122,5 +122,6 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+	mdrv.allocMgr.UnregisterClaimsForPod(lh, pod.Id)
 	return nil
 }

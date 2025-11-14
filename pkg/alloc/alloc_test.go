@@ -20,6 +20,7 @@ import (
 	"maps"
 	"testing"
 
+	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
@@ -118,6 +119,7 @@ func TestRegisterUpdatesExistingData(t *testing.T) {
 }
 
 func TestCannotDeleteIfUnbounded(t *testing.T) {
+	lh := testr.New(t)
 	claimAllocs := map[string]types.Allocation{
 		"memory": {
 			ResourceIdent: types.ResourceIdent{
@@ -135,7 +137,7 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 	require.Equal(t, mgr.CountClaims(), 1)
 	require.Equal(t, mgr.CountPods(), 0)
 
-	mgr.UnregisterClaimsForPod("pod-AAA")
+	mgr.UnregisterClaimsForPod(lh, "pod-AAA")
 	require.Equal(t, mgr.CountClaims(), 1)
 	require.Equal(t, mgr.CountPods(), 0)
 
@@ -147,6 +149,7 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 }
 
 func TestUnregisterByPod(t *testing.T) {
+	lh := testr.New(t)
 	mgr := NewManager()
 
 	mgr.RegisterClaim(k8stypes.UID("foo"), map[string]types.Allocation{
@@ -159,7 +162,7 @@ func TestUnregisterByPod(t *testing.T) {
 			NUMAZone: 1,
 		},
 	})
-	mgr.BindClaimToPod("pod-BBB", k8stypes.UID("foo"))
+	mgr.BindClaimToPod(lh, "pod-BBB", k8stypes.UID("foo"))
 
 	mgr.RegisterClaim(k8stypes.UID("bar"), map[string]types.Allocation{
 		"hugepages-2m": {
@@ -171,9 +174,9 @@ func TestUnregisterByPod(t *testing.T) {
 			NUMAZone: 1,
 		},
 	})
-	mgr.BindClaimToPod("pod-BBB", k8stypes.UID("bar"))
+	mgr.BindClaimToPod(lh, "pod-BBB", k8stypes.UID("bar"))
 
-	mgr.UnregisterClaimsForPod("pod-BBB")
+	mgr.UnregisterClaimsForPod(lh, "pod-BBB")
 	require.Equal(t, mgr.CountClaims(), 0)
 	require.Equal(t, mgr.CountPods(), 0)
 
