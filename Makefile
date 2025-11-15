@@ -42,10 +42,15 @@ default: build ## Default builds
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-27s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-build: build-dramemory ## build all the binaries
+build: build-dramemory build-setuphelpers ## build all the binaries
 
 build-dramemory: ## build dramemory
 	go build -v -o "$(OUT_DIR)/dramemory" ./cmd/dramemory
+
+build-setuphelpers: build-setup-containerd ## build the configuration setup helpers
+
+build-setup-containerd: ## build the containerd configuration setup helper
+	go build -v -o "$(OUT_DIR)/setup-containerd" ./config/containerd
 
 clean: ## clean
 	rm -rf "$(OUT_DIR)/"
