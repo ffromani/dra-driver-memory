@@ -58,6 +58,9 @@ clean: ## clean
 test-unit: ## run tests
 	go test -coverprofile=coverage.out ./pkg/... ./internal/...
 
+test-e2e-base: ## run core E2E tests
+	true # intentionally empty for now
+
 update: ## runs go mod tidy
 	go mod tidy
 
