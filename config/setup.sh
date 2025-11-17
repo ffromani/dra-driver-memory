@@ -1,0 +1,8 @@
+#!/bin/sh
+set -o errexit
+set -o nounset
+set -x
+if /bin/setup-containerd /etc/containerd/config.toml; then
+	/bin/echo "restarting containerd"
+	/bin/nsenter -t 1 -m -u -i -n -p -- systemctl restart containerd
+fi

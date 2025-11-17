@@ -119,7 +119,7 @@ func processCDI(cri map[string]any) {
 }
 
 func processHugepages(cri map[string]any) {
-	cri["tolerate_missing_hugepages_controller"] = false
+	cri["tolerate_missing_hugetlb_controller"] = false
 	cri["disable_hugetlb_controller"] = false
 }
 
