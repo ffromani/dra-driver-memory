@@ -31,4 +31,5 @@ FROM busybox:1.36.1-glibc
 COPY --from=builder --chown=root:root /go/bin/dramemory /bin/dramemory
 COPY --from=builder --chown=root:root /go/bin/setup-containerd /bin/setup-containerd
 COPY --from=builder --chown=root:root /go/src/drv/config/setup.sh /bin/setup.sh
+COPY --from=builder --chown=root:root /go/src/drv/hack/drameminfo /bin/drameminfo
 CMD ["/bin/dramemory"]
