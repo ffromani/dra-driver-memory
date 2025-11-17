@@ -22,10 +22,12 @@ ARCH=$(shell go env GOARCH)
 # dependencies
 ## versions
 YQ_VERSION ?= 4.47.1
+SHELLCHECK_VERSION ?= 0.11.0
 # matches golang 1.24.z
 GOLANGCI_LINT_VERSION ?= 2.4.0
 # paths
 YQ = $(OUT_DIR)/yq
+SHELLCHECK = $(OUT_DIR)/shellcheck
 GOLANGCI_LINT = $(OUT_DIR)/golangci-lint
 
 # disable CGO by default for static binaries
@@ -125,9 +127,12 @@ ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 ci-kind-teardown:  ## teardown a CI cluster
 	kind delete cluster --name ${CLUSTER_NAME}
 
-lint:  ## run the linter against the codebase
+lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...
+	$(SHELLCHECK) ./config/setup.sh
+
 $(GOLANGCI_LINT): dep-install-golangci-lint
+$(SHELLCHECK): dep-insatall-shellcheck
 
 ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install manifests
 	@cd hack/ci && ../../bin/yq e -s '(.kind | downcase) + "-" + .metadata.name + ".part.yaml"' ../../hack/ci/install.tmpl.yaml
@@ -169,5 +174,19 @@ dep-install-golangci-lint: $(OUT_DIR)  ## Download golangci-lint locally if nece
 			tar -x -C $(OUT_DIR) -f $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH).tar.gz ;\
 			ln -sf $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)-$(OS)-$(ARCH)/golangci-lint $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION) ;\
 			ln -sf $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION) $(GOLANGCI_LINT) ;\
+		}; \
+	} || true
+
+.PHONY: dep-install-shekkcheck
+dep-install-shellcheck: $(OUT_DIR)  ## Download shellcheck locally if necessary, or reuse the system binary
+	@[ ! -f $(OUT_DIR)/shellcheck ] && { \
+		command -v shellcheck >/dev/null 2>&1 && {\
+			ln -sf $(shell command -v shellcheck ) $(OUT_DIR) ;\
+			echo "reusing system shellcheck" ;\
+		} || { \
+			curl -sSL "https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).$(OS).x86_64.tar.xz" -o $(SHELLCHECK)-v$(SHELLCHECK_VERSION).$(OS).$(ARCH).tar.xz ;\
+			tar -x -C $(OUT_DIR) -f $(SHELLCHECK)-v$(SHELLCHECK_VERSION).$(OS).$(ARCH).tar.xz ;\
+			ln -sf $(SHELLCHECK)-v$(SHELLCHECK_VERSION)/shellcheck $(SHELLCHECK)-$(SHELLCHECK_VERSION) ;\
+			ln -sf $(SHELLCHECK)-$(SHELLCHECK_VERSION) $(SHELLCHECK) ;\
 		}; \
 	} || true

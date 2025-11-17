@@ -52,7 +52,7 @@ jobs:
     - name: Run unit tests
       run: make test-unit
 
-  golangci-lint:
+  lint:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
@@ -65,9 +65,6 @@ jobs:
 
     - name: Ensure vendoring
       run: go mod vendor
-
-    - name: Ensure linter avaialbility
-      run: make dep-install-golangci-lint
 
     - name: Run linter
       run: make lint
