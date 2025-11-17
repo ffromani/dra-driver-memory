@@ -61,7 +61,7 @@ test-unit: ## run tests
 	go test -coverprofile=coverage.out ./pkg/... ./internal/...
 
 test-e2e-base: ## run core E2E tests
-	true # intentionally empty for now
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind'
 
 update: ## runs go mod tidy
 	go mod tidy
