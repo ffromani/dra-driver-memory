@@ -103,29 +103,20 @@ spec:
       serviceAccountName: dramemory
       hostPID: true
       initContainers:
-        - name: enable-nri-and-cdi
-          image: busybox:stable
+        - name: setup-runtime
+          image: quay.io/ffromani/dramem:latest
           volumeMounts:
             - mountPath: /etc
               name: etc
           securityContext:
             privileged: true
           command:
-            - /bin/sh
-            - -c
-            - |
-              set -o errexit
-              set -o pipefail
-              set -o nounset
-              set -x
-              if [ /setup-containerd /etc/containerd/config.toml ]; then
-                echo "restarting containerd"
-                nsenter -t 1 -m -u -i -n -p -- systemctl restart containerd
-              fi
+            - /bin/setup.sh
       containers:
         - name: dramemory
+          command:
+            - /bin/dramemory
           args:
-            - /dramemory
             - --v=6
           image: quay.io/ffromani/dramem:latest
           imagePullPolicy: IfNotPresent

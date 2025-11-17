@@ -132,6 +132,8 @@ $(GOLANGCI_LINT): dep-install-golangci-lint
 ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install manifests
 	@cd hack/ci && ../../bin/yq e -s '(.kind | downcase) + "-" + .metadata.name + ".part.yaml"' ../../hack/ci/install.tmpl.yaml
 	@# need to make kind load docker-image working as expected: see https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
+	@bin/yq -i '.spec.template.spec.initContainers[0].imagePullPolicy = "IfNotPresent"' hack/ci/daemonset-dramemory.part.yaml
+	@bin/yq -i '.spec.template.spec.initContainers[0].image = "${IMAGE_CI}"' hack/ci/daemonset-dramemory.part.yaml
 	@bin/yq -i '.spec.template.spec.containers[0].imagePullPolicy = "IfNotPresent"' hack/ci/daemonset-dramemory.part.yaml
 	@bin/yq -i '.spec.template.spec.containers[0].image = "${IMAGE_CI}"' hack/ci/daemonset-dramemory.part.yaml
 	@bin/yq -i '.spec.template.metadata.labels["build"] = "${GIT_VERSION}"' hack/ci/daemonset-dramemory.part.yaml
