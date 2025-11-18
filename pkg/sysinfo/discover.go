@@ -19,87 +19,46 @@ package sysinfo
 import (
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 
 	"github.com/go-logr/logr"
-	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
-	ghwopt "github.com/jaypipes/ghw/pkg/option"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 
 	"github.com/ffromani/dra-driver-memory/pkg/types"
-	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
 
-type Zone struct {
-	ID        int             `json:"id"`
-	Distances []int           `json:"distances"`
-	Memory    *ghwmemory.Area `json:"memory"`
-}
-
-func FromNodes(nodes []*ghwtopology.Node) []Zone {
-	zones := make([]Zone, 0, len(nodes))
-	for _, node := range nodes {
-		zones = append(zones, Zone{
-			ID:        node.ID,
-			Distances: node.Distances,
-			Memory:    node.Memory,
-		})
-	}
-	return zones
-}
-
-type MachineData struct {
-	Pagesize      uint64   `json:"page_size"`
-	Hugepagesizes []uint64 `json:"huge_page_sizes"`
-	Zones         []Zone   `json:"zones"`
-}
-
-func GetMachineData(lh logr.Logger, sysRoot string) (MachineData, error) {
-	topo, err := ghwtopology.New(ghwopt.WithChroot(sysRoot))
-	if err != nil {
-		return MachineData{}, err
-	}
-	var Hugepagesizes []uint64
-	for _, pageSize := range HugepageSizes(lh, sysRoot) {
-		sz, err := unitconv.CGroupStringToSizeInBytes(pageSize)
-		if err != nil {
-			lh.Error(err, "getting system huge page size")
-			continue
-		}
-		Hugepagesizes = append(Hugepagesizes, sz)
-	}
-	return MachineData{
-		Pagesize:      uint64(os.Getpagesize()),
-		Hugepagesizes: Hugepagesizes,
-		Zones:         FromNodes(topo.Nodes),
-	}, nil
-}
-
 type Discoverer struct {
+	// GetMachineData is overridable to enable testing.
+	// We expect the vast majority of cases to be fine with default.
+	GetMachineData     GetMachineDataFunc
 	sysRoot            string
 	machineData        MachineData
-	resourceNames      sets.Set[string]
 	spanByDeviceName   map[string]types.Span
 	deviceTypeToSlices map[string]resourceslice.Slice
 }
 
+type GetMachineDataFunc func(logr.Logger, string) (MachineData, error)
+
 func NewDiscoverer(sysRoot string) *Discoverer {
 	ds := &Discoverer{
-		sysRoot: sysRoot,
+		GetMachineData: GetMachineData,
+		sysRoot:        sysRoot,
 	}
 	ds.reset()
 	return ds
 }
 
 func (ds *Discoverer) AllResourceNames() sets.Set[string] {
-	return ds.resourceNames.Clone()
+	resourceNames := sets.New[string]()
+	for span := range maps.Values(ds.spanByDeviceName) {
+		resourceNames.Insert(span.Name())
+	}
+	return resourceNames
 }
 
-func (ds *Discoverer) GetMachineData() MachineData {
+func (ds *Discoverer) MachineData() MachineData {
 	return ds.machineData
 }
 
@@ -113,7 +72,7 @@ func (ds *Discoverer) GetSpanForDevice(lh logr.Logger, devName string) (types.Sp
 }
 
 func (ds *Discoverer) Refresh(lh logr.Logger) error {
-	machineData, err := GetMachineData(lh, ds.sysRoot)
+	machineData, err := ds.GetMachineData(lh, ds.sysRoot)
 	if err != nil {
 		return err
 	}
@@ -129,7 +88,6 @@ func (ds *Discoverer) ResourceSlices() []resourceslice.Slice {
 }
 
 func (ds *Discoverer) reset() {
-	ds.resourceNames = sets.New[string]()
 	ds.spanByDeviceName = make(map[string]types.Span)
 	ds.deviceTypeToSlices = make(map[string]resourceslice.Slice)
 }
