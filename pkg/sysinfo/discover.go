@@ -26,7 +26,6 @@ import (
 	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
 	ghwopt "github.com/jaypipes/ghw/pkg/option"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
-	libcontainercgroups "github.com/opencontainers/cgroups"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
@@ -65,8 +64,7 @@ func GetMachineData(lh logr.Logger, sysRoot string) (MachineData, error) {
 		return MachineData{}, err
 	}
 	var Hugepagesizes []uint64
-	// TODO this doesn't obey sysRoot :\
-	for _, pageSize := range libcontainercgroups.HugePageSizes() {
+	for _, pageSize := range HugepageSizes(lh, sysRoot) {
 		sz, err := unitconv.CGroupStringToSizeInBytes(pageSize)
 		if err != nil {
 			lh.Error(err, "getting system huge page size")
@@ -95,10 +93,6 @@ func NewDiscoverer(sysRoot string) *Discoverer {
 	}
 	ds.reset()
 	return ds
-}
-
-func (ds *Discoverer) HasResource(resName string) bool {
-	return ds.resourceNames.Has(resName)
 }
 
 func (ds *Discoverer) AllResourceNames() sets.Set[string] {
