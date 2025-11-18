@@ -34,7 +34,6 @@ import (
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/ffromani/dra-driver-memory/pkg/env"
-	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
@@ -48,22 +47,16 @@ func (mdrv *MemoryDriver) PublishResources(ctx context.Context) {
 	lh.V(2).Info("start")
 	defer lh.V(2).Info("done")
 
-	machinedata, err := mdrv.sysinformer.Discover()
+	err := mdrv.discoverer.Refresh(lh)
 	if err != nil {
 		lh.Error(err, "enumerating memory resources")
 		return
 	}
 
-	resourceInfo := sysinfo.Process(lh, machinedata)
-	// TODO: what about races?
-	mdrv.spanByDeviceName = resourceInfo.GetSpanByDeviceName()
-	mdrv.resourceNames = resourceInfo.GetResourceNames()
-	mdrv.machineData = machinedata
-
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
 			mdrv.nodeName: {
-				Slices: resourceInfo.GetResourceSlices(),
+				Slices: mdrv.discoverer.ResourceSlices(),
 			},
 		},
 	}
@@ -143,11 +136,9 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 			continue
 		}
 
-		span, ok := mdrv.spanByDeviceName[devRes.Device]
-		if !ok {
-			return kubeletplugin.PrepareResult{
-				Err: fmt.Errorf("device %q not matches any registered memory span", devRes.Device),
-			}
+		span, err := mdrv.discoverer.GetSpanForDevice(lh, devRes.Device)
+		if err != nil {
+			return kubeletplugin.PrepareResult{Err: err}
 		}
 
 		capName := span.CapacityName()

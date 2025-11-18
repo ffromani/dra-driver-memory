@@ -17,136 +17,13 @@
 package sysinfo
 
 import (
-	"maps"
-	"slices"
-
-	"github.com/go-logr/logr"
-	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
-
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/utils/ptr"
 
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
-
-type Zone struct {
-	ID        int             `json:"id"`
-	Distances []int           `json:"distances"`
-	Memory    *ghwmemory.Area `json:"memory"`
-}
-
-func FromNodes(nodes []*ghwtopology.Node) []Zone {
-	zones := make([]Zone, 0, len(nodes))
-	for _, node := range nodes {
-		zones = append(zones, Zone{
-			ID:        node.ID,
-			Distances: node.Distances,
-			Memory:    node.Memory,
-		})
-	}
-	return zones
-}
-
-type MachineData struct {
-	Pagesize      uint64   `json:"page_size"`
-	Hugepagesizes []uint64 `json:"huge_page_sizes"`
-	Zones         []Zone   `json:"zones"`
-}
-
-type ResourceInfo struct {
-	spanByDeviceName   map[string]types.Span
-	deviceTypeToSlices map[string]resourceslice.Slice
-}
-
-func (ri ResourceInfo) GetResourceSlices() []resourceslice.Slice {
-	return slices.Collect(maps.Values(ri.deviceTypeToSlices))
-}
-
-func (ri ResourceInfo) GetSpanByDeviceName() map[string]types.Span {
-	return ri.spanByDeviceName
-}
-
-func (ri ResourceInfo) GetResourceNames() sets.Set[string] {
-	resourceNames := sets.New[string]()
-	for span := range maps.Values(ri.spanByDeviceName) {
-		resourceNames.Insert(span.Name())
-	}
-	return resourceNames
-}
-
-// Process processes MachineData and creates resource slices out of it, plus a device:numaNode mapping.
-// This function cannot really fail and never returns invalid data but it can return empty data.
-func Process(lh logr.Logger, machine MachineData) ResourceInfo {
-	info := ResourceInfo{
-		spanByDeviceName:   make(map[string]types.Span),
-		deviceTypeToSlices: make(map[string]resourceslice.Slice),
-	}
-
-	for numaNode, nodeInfo := range machine.Zones {
-		if nodeInfo.Memory == nil {
-			lh.V(2).Info("NUMA node %d reports no memory", numaNode)
-			continue
-		}
-		processMemory(lh, &info, machine.Pagesize, int64(numaNode), nodeInfo)
-		for _, hpSize := range sortedHugepageSizes(nodeInfo) {
-			processHugepages(lh, &info, hpSize, int64(numaNode), nodeInfo)
-		}
-	}
-
-	if lh.V(4).Enabled() {
-		for devName, devSpan := range info.spanByDeviceName {
-			lh.V(4).Info("Devices mapping", "device", devName, "deviceType", devSpan.Name(), "NUMANode", devSpan.NUMAZone)
-		}
-	}
-	return info
-}
-
-func sortedHugepageSizes(nodeInfo Zone) []uint64 {
-	var sizeInBytes []uint64
-	for sz := range nodeInfo.Memory.HugePageAmountsBySize {
-		sizeInBytes = append(sizeInBytes, sz)
-	}
-	slices.Sort(sizeInBytes)
-	return sizeInBytes
-}
-
-func processMemory(lh logr.Logger, info *ResourceInfo, pageSize uint64, numaNode int64, nodeInfo Zone) {
-	span := types.Span{
-		ResourceIdent: types.ResourceIdent{
-			Kind:     types.Memory,
-			Pagesize: pageSize,
-		},
-		Amount:   nodeInfo.Memory.TotalUsableBytes,
-		NUMAZone: numaNode,
-	}
-	memDevice := ToDevice(span)
-	info.spanByDeviceName[memDevice.Name] = span
-	memorySlice := info.deviceTypeToSlices[span.Name()]
-	memorySlice.Devices = append(memorySlice.Devices, memDevice)
-	info.deviceTypeToSlices[span.Name()] = memorySlice
-}
-
-func processHugepages(lh logr.Logger, info *ResourceInfo, hpSize uint64, numaNode int64, nodeInfo Zone) {
-	amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
-	span := types.Span{
-		ResourceIdent: types.ResourceIdent{
-			Kind:     types.Hugepages,
-			Pagesize: hpSize,
-		},
-		Amount:   amounts.Total,
-		NUMAZone: numaNode,
-	}
-	hpDevice := ToDevice(span)
-	info.spanByDeviceName[hpDevice.Name] = span
-	hugepageSlice := info.deviceTypeToSlices[span.Name()]
-	hugepageSlice.Devices = append(hugepageSlice.Devices, hpDevice)
-	info.deviceTypeToSlices[span.Name()] = hugepageSlice
-}
 
 func MakeAttributes(sp types.Span) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	pNode := ptr.To(sp.NUMAZone)

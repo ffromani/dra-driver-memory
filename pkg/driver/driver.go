@@ -26,7 +26,6 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/go-logr/logr"
 
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
@@ -36,7 +35,6 @@ import (
 	"github.com/ffromani/dra-driver-memory/pkg/alloc"
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
-	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 // This is the orchestration layer. All the sub-components (DRA layer, NRI layer, CDI manager...)
@@ -68,12 +66,7 @@ type MemoryDriver struct {
 	nriPlugin  stub.Stub
 	cdiMgr     *cdi.Manager
 	allocMgr   *alloc.Manager
-	// todo factor in
-	sysinformer SysinfoDiscoverer
-	machineData sysinfo.MachineData
-	// which device represent which span?
-	spanByDeviceName map[string]types.Span
-	resourceNames    sets.Set[string]
+	discoverer *sysinfo.Discoverer
 }
 
 type SysinfoVerifier interface {
@@ -89,8 +82,8 @@ type Environment struct {
 	DriverName  string
 	NodeName    string
 	Clientset   kubernetes.Interface
-	SysDiscover SysinfoDiscoverer
 	SysVerifier SysinfoVerifier
+	SysRoot     string
 }
 
 // Start creates and starts a new MemoryDriver.
@@ -99,13 +92,12 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		return nil, err
 	}
 	plugin := &MemoryDriver{
-		driverName:       env.DriverName,
-		nodeName:         env.NodeName,
-		kubeClient:       env.Clientset,
-		logger:           env.Logger.WithName(env.DriverName),
-		sysinformer:      env.SysDiscover,
-		spanByDeviceName: make(map[string]types.Span),
-		allocMgr:         alloc.NewManager(),
+		driverName: env.DriverName,
+		nodeName:   env.NodeName,
+		kubeClient: env.Clientset,
+		logger:     env.Logger.WithName(env.DriverName),
+		allocMgr:   alloc.NewManager(),
+		discoverer: sysinfo.NewDiscoverer(env.SysRoot),
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)

@@ -121,11 +121,9 @@ func RunDaemon(ctx context.Context, params Params, drvLogger logr.Logger) error 
 		NodeName:   nodeName,
 		Clientset:  clientset,
 		Logger:     drvLogger,
+		SysRoot:    params.SysRoot,
 		SysVerifier: SysinfoVerifierFunc(func() error {
 			return sysinfo.Validate(drvLogger, params.ProcRoot)
-		}),
-		SysDiscover: SysinfoDiscovererFunc(func() (sysinfo.MachineData, error) {
-			return GetMachineData(params, drvLogger)
 		}),
 	}
 	dramem, err := driver.Start(egCtx, driverEnv)

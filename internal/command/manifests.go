@@ -26,11 +26,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 func MakeManifests(params Params, logger logr.Logger) error {
-	machine, err := GetMachineData(params, logger)
+	machine, err := sysinfo.GetMachineData(logger, params.SysRoot)
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func MakeManifests(params Params, logger logr.Logger) error {
 	}
 	for _, devClass := range devClasses {
 		fmt.Println("---")
-		printYAML(devClass, logger)
+		logYAML(logger, devClass)
 	}
 	return nil
 }

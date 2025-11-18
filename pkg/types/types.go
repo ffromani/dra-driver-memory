@@ -91,9 +91,17 @@ type Span struct {
 	NUMAZone int64
 }
 
+func (sp Span) String() string {
+	return fmt.Sprintf("%s size=%s numaZone=%d", sp.Name(), unitconv.SizeInBytesToMinimizedString(uint64(sp.Amount)), sp.NUMAZone)
+}
+
 // Currently, an Allocation currently can only be a proper subset of a Span.
 type Allocation struct {
 	ResourceIdent
 	Amount   int64 // bytes
 	NUMAZone int64
+}
+
+func (ac Allocation) String() string {
+	return fmt.Sprintf("%s size=%s numaZone=%d", ac.Name(), unitconv.SizeInBytesToMinimizedString(uint64(ac.Amount)), ac.NUMAZone)
 }
