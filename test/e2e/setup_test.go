@@ -36,7 +36,7 @@ import (
 gingko flags explained:
 
 - Serial:
-because the tests want to change the CPU allocation, which is a giant blob of node shared state.
+because the tests want to change the memory allocation, which is a giant blob of node shared state.
 - Ordered:
 to do the relatively costly initial resource discovery on the target node only once
 - ContinueOnFailure
