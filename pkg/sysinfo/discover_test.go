@@ -20,9 +20,11 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	ghwmemory "github.com/jaypipes/ghw/pkg/memory"
+	"github.com/stretchr/testify/require"
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,7 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TestProcess(t *testing.T) {
+func TestRefreshWithData(t *testing.T) {
 	type testcase struct {
 		name             string
 		machine          MachineData
@@ -130,6 +132,8 @@ func TestProcess(t *testing.T) {
 
 	for _, tcase := range testcases {
 		t.Run(tcase.name, func(t *testing.T) {
+			fakeSysRoot := t.TempDir()
+
 			saveMakeDeviceName := MakeDeviceName
 			t.Cleanup(func() {
 				MakeDeviceName = saveMakeDeviceName
@@ -137,14 +141,20 @@ func TestProcess(t *testing.T) {
 			MakeDeviceName = tcase.makeDeviceName
 
 			logger := testr.New(t)
-			rinfo := Process(logger, tcase.machine)
 
-			gotResNames := sets.List(rinfo.GetResourceNames())
+			disc := NewDiscoverer(fakeSysRoot) // not really needed, but let's be clean
+			disc.GetMachineData = func(_ logr.Logger, _ string) (MachineData, error) {
+				return tcase.machine, nil
+			}
+			err := disc.Refresh(logger)
+			require.NoError(t, err)
+
+			gotResNames := sets.List(disc.AllResourceNames())
 			if diff := cmp.Diff(gotResNames, tcase.expectedResNames); diff != "" {
-				t.Errorf("unexpected resourceslice: %s", diff)
+				t.Errorf("unexpected resource names: %s", diff)
 			}
 
-			gotSlices := rinfo.GetResourceSlices()
+			gotSlices := disc.ResourceSlices()
 			// CRITICAL NOTE: this is deeply tied to the layout of the resource.
 			// at the same time there's no need to sort every time in `GetResourceSlices`,
 			// let alone add a sorted variant. So looks like this is the lesser evil.

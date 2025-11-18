@@ -67,7 +67,7 @@ func (fxt *Fixture) Setup(ctx context.Context) error {
 	if fxt.Namespace != nil {
 		return nil // TODO: or fail?
 	}
-	generateName := "dracpu-e2e-"
+	generateName := "dramem-e2e-"
 	if fxt.Prefix != "" {
 		generateName += fxt.Prefix + "-"
 	}

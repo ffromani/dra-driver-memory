@@ -49,7 +49,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
 
-	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.resourceNames)
+	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.discoverer.AllResourceNames())
 	if err != nil {
 		lh.Error(err, "parsing DRA env for container")
 	}
@@ -73,7 +73,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.machineData, allocs) {
+	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.MachineData(), allocs) {
 		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
 	}
 
