@@ -20,24 +20,32 @@ import (
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/dynamic-resource-allocation/deviceattribute"
 	"k8s.io/utils/ptr"
 
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
+const (
+	StandardDeviceAttributePrefix = deviceattribute.StandardDeviceAttributePrefix
+)
+
 func MakeAttributes(sp types.Span) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	pNode := ptr.To(sp.NUMAZone)
+	// some attributes are stabler than others, we have more confidence that
+	// their naming and meaning is solid; others are incubating: less stable
+	// in the sense we may need to change them; some others, listed last,
+	// are added for compatibility with other DRA drivers until the ecosystem
+	// matures and we get standards for attributes.
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		// alignment compatibility: dra-driver-sriov
-		"resource.kubernetes.io/numaNode": {IntValue: pNode},
-		// alignment compatibility: dra-driver-cpu
-		"dra.cpu/numaNode": {IntValue: pNode},
-		// alignment compatibility: dranet
-		"dra.net/numaNode": {IntValue: pNode},
-		// our own attributes, at last
-		"dra.memory/numaNode": {IntValue: pNode},
-		"dra.memory/pageSize": {StringValue: ptr.To(sp.PagesizeString())},
-		"dra.memory/hugeTLB":  {BoolValue: ptr.To(sp.NeedsHugeTLB())},
+		// stable attributes
+		StandardDeviceAttributePrefix + "numaNode": {IntValue: pNode},
+		// incubating attributes
+		StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To(sp.PagesizeString())},
+		StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(sp.NeedsHugeTLB())},
+		// compatibility attributes
+		"dra.cpu/numaNode": {IntValue: pNode}, // dra-driver-cpu
+		"dra.net/numaNode": {IntValue: pNode}, // dranet
 	}
 }
 

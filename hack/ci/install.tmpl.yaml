@@ -160,9 +160,9 @@ metadata:
   name: dra.memory
 spec:
   selectors:
-    - cel:
-        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
-          == "4k" && device.attributes["dra.memory"].hugeTLB == false
+  - cel:
+      expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
+        == "4k" && device.attributes["resource.kubernetes.io"].hugeTLB == false
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -170,9 +170,9 @@ metadata:
   name: dra.hugepages-2m
 spec:
   selectors:
-    - cel:
-        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
-          == "2m" && device.attributes["dra.memory"].hugeTLB == true
+  - cel:
+      expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
+        == "2m" && device.attributes["resource.kubernetes.io"].hugeTLB == true
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -180,6 +180,6 @@ metadata:
   name: dra.hugepages-1g
 spec:
   selectors:
-    - cel:
-        expression: device.driver == "dra.memory" && device.attributes["dra.memory"].pageSize
-          == "1g" && device.attributes["dra.memory"].hugeTLB == true
+  - cel:
+      expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
+        == "1g" && device.attributes["resource.kubernetes.io"].hugeTLB == true

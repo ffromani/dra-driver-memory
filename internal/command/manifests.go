@@ -85,5 +85,5 @@ func deviceClass(driverName string, ri types.ResourceIdent) resourceapi.DeviceCl
 }
 
 func celExpr(driverName string, ri types.ResourceIdent) string {
-	return fmt.Sprintf("device.driver == %q && device.attributes[\"dra.memory\"].pageSize == %q && device.attributes[\"dra.memory\"].hugeTLB == %v", driverName, ri.PagesizeString(), ri.NeedsHugeTLB())
+	return fmt.Sprintf("device.driver == %q && device.attributes[\"resource.kubernetes.io\"].pageSize == %q && device.attributes[\"resource.kubernetes.io\"].hugeTLB == %v", driverName, ri.PagesizeString(), ri.NeedsHugeTLB())
 }
