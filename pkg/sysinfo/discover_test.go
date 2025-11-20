@@ -177,15 +177,10 @@ type attrInfo struct {
 func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	pNode := ptr.To(info.numaNode)
 	return map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		// alignment compatibility: dra-driver-sriov
 		"resource.kubernetes.io/numaNode": {IntValue: pNode},
-		// alignment compatibility: dra-driver-cpu
-		"dra.cpu/numaNode": {IntValue: pNode},
-		// alignment compatibility: dranet
-		"dra.net/numaNode": {IntValue: pNode},
-		// our own attributes, at last
-		"dra.memory/numaNode": {IntValue: pNode},
-		"dra.memory/pageSize": {StringValue: ptr.To(info.sizeName)},
-		"dra.memory/hugeTLB":  {BoolValue: ptr.To(info.hugeTLB)},
+		"resource.kubernetes.io/pageSize": {StringValue: ptr.To(info.sizeName)},
+		"resource.kubernetes.io/hugeTLB":  {BoolValue: ptr.To(info.hugeTLB)},
+		"dra.cpu/numaNode":                {IntValue: pNode},
+		"dra.net/numaNode":                {IntValue: pNode},
 	}
 }
