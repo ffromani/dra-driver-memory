@@ -49,7 +49,7 @@ func LimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allo
 	allocationLimits := map[string]uint64{}
 	for _, alloc := range allocs {
 		pageSize := unitconv.SizeInBytesToCGroupString(alloc.Pagesize)
-		allocationLimits[pageSize] = uint64(alloc.Amount) * alloc.Pagesize
+		allocationLimits[pageSize] = uint64(alloc.Amount)
 	}
 	lh.V(0).Info("allocation hugepage limits", "limits", allocationLimits)
 

@@ -29,8 +29,8 @@ import (
 func TestLimitsFromAllocation(t *testing.T) {
 	machineDataX86 := sysinfo.MachineData{
 		Hugepagesizes: []uint64{
-			2 * 1024 * 1024,
-			1024 * 1024 * 1024,
+			2 * (1 << 20),
+			(1 << 30),
 		},
 	}
 
@@ -64,16 +64,16 @@ func TestLimitsFromAllocation(t *testing.T) {
 				{
 					ResourceIdent: types.ResourceIdent{
 						Kind:     types.Hugepages,
-						Pagesize: 2 * 1024 * 1024,
+						Pagesize: 2 * (1 << 20),
 					},
-					Amount:   128,
+					Amount:   128 * 2 * (1 << 20),
 					NUMAZone: 1,
 				},
 			},
 			expected: []Limit{
 				{
 					PageSize: "2MB",
-					Limit:    128 * 2 * 1024 * 1024,
+					Limit:    128 * 2 * (1 << 20),
 				},
 				{
 					PageSize: "1GB",
@@ -88,9 +88,9 @@ func TestLimitsFromAllocation(t *testing.T) {
 				{
 					ResourceIdent: types.ResourceIdent{
 						Kind:     types.Hugepages,
-						Pagesize: 1024 * 1024 * 1024,
+						Pagesize: (1 << 30),
 					},
-					Amount:   4,
+					Amount:   4 * (1 << 30),
 					NUMAZone: 1,
 				},
 			},
@@ -101,7 +101,7 @@ func TestLimitsFromAllocation(t *testing.T) {
 				},
 				{
 					PageSize: "1GB",
-					Limit:    4 * 1024 * 1024 * 1024,
+					Limit:    4 * (1 << 30),
 				},
 			},
 		},

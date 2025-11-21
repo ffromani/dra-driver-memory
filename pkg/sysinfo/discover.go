@@ -139,7 +139,7 @@ func (ds *Discoverer) processHugepages(lh logr.Logger, hpSize uint64, numaNode i
 			Kind:     types.Hugepages,
 			Pagesize: hpSize,
 		},
-		Amount:   amounts.Total,
+		Amount:   int64(hpSize) * amounts.Total,
 		NUMAZone: numaNode,
 	}
 	hpDevice := ToDevice(span)
