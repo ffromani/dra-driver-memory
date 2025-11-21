@@ -57,7 +57,10 @@ build-setup-containerd: ## build the containerd configuration setup helper
 clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
-test-unit: ## run tests
+test-unit-pkg: ## run tests for the main library code
+	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|internal|pkg/driver|test' )
+
+test-unit: ## run tests for all the library code, including internal
 	go test -coverprofile=coverage.out ./pkg/... ./internal/...
 
 test-e2e-base: ## run core E2E tests
