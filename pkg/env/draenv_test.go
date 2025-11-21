@@ -55,7 +55,7 @@ func TestCreateNUMANodesRoundTrip(t *testing.T) {
 			logger := testr.New(t)
 			env := CreateNUMANodes(logger, tcase.uid, tcase.nodes)
 			got := make(map[k8stypes.UID]cpuset.CPUSet)
-			ok, err := ExtractNUMANodesTo(logger, env, got)
+			ok, err := ExtractNUMANodesInto(logger, env, got)
 			require.NoError(t, err)
 			require.True(t, ok, "cannot extract from env var %q", env)
 			if diff := cmp.Diff(got, tcase.expected, cmpopts.IgnoreUnexported(cpuset.CPUSet{})); diff != "" {
@@ -65,23 +65,26 @@ func TestCreateNUMANodesRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCreateSpanRoundTrip(t *testing.T) {
+func TestCreateAllocRoundTrip(t *testing.T) {
 	type testcase struct {
-		name         string
-		uid          k8stypes.UID
-		resourceName string
-		amount       int64
-		numaNode     int64
-		expected     map[k8stypes.UID]types.Allocation
+		name     string
+		uid      k8stypes.UID
+		alloc    types.Allocation
+		expected map[k8stypes.UID]types.Allocation
 	}
 
 	testcases := []testcase{
 		{
-			name:         "simplest, single node",
-			uid:          k8stypes.UID("FOOBAR"),
-			resourceName: "hugepages-2m",
-			amount:       8 * 2 * 1024 * 1024,
-			numaNode:     2,
+			name: "simplest, single node",
+			uid:  k8stypes.UID("FOOBAR"),
+			alloc: types.Allocation{
+				ResourceIdent: types.ResourceIdent{
+					Kind:     types.Hugepages,
+					Pagesize: 2 * 1024 * 1024,
+				},
+				Amount:   8 * 2 * 1024 * 1024,
+				NUMAZone: 2,
+			},
 			expected: map[k8stypes.UID]types.Allocation{
 				k8stypes.UID("FOOBAR"): {
 					ResourceIdent: types.ResourceIdent{
@@ -98,9 +101,10 @@ func TestCreateSpanRoundTrip(t *testing.T) {
 	for _, tcase := range testcases {
 		t.Run(tcase.name, func(t *testing.T) {
 			logger := testr.New(t)
-			env := CreateSpan(logger, tcase.uid, tcase.resourceName, tcase.amount, tcase.numaNode)
+			env := CreateAlloc(logger, tcase.uid, tcase.alloc)
+			logger.Info("CreateAlloc", "env", env)
 			got := make(map[k8stypes.UID]types.Allocation)
-			ok, err := ExtractAllocsTo(logger, env, sets.New(tcase.resourceName), got)
+			ok, err := ExtractAllocsInto(logger, env, sets.New(tcase.alloc.Name()), got)
 			require.NoError(t, err)
 			require.True(t, ok, "cannot extract from env var %q", env)
 			if diff := cmp.Diff(got, tcase.expected); diff != "" {
@@ -114,9 +118,7 @@ func TestExtractAll(t *testing.T) {
 	type testcase struct {
 		name          string
 		uid           k8stypes.UID
-		resourceName  string
-		amount        int64
-		numaNode      int64
+		alloc         types.Allocation
 		nodes         sets.Set[int64]
 		expectedNodes map[k8stypes.UID]cpuset.CPUSet
 		expectedSpans map[k8stypes.UID]types.Allocation
@@ -124,12 +126,17 @@ func TestExtractAll(t *testing.T) {
 
 	testcases := []testcase{
 		{
-			name:         "simplest, single node",
-			uid:          k8stypes.UID("FOOBAR"),
-			resourceName: "hugepages-1g",
-			amount:       8 * 1024 * 1024 * 1024,
-			numaNode:     0,
-			nodes:        sets.New[int64](0),
+			name: "simplest, single node",
+			uid:  k8stypes.UID("FOOBAR"),
+			alloc: types.Allocation{
+				ResourceIdent: types.ResourceIdent{
+					Kind:     types.Hugepages,
+					Pagesize: 1024 * 1024 * 1024,
+				},
+				Amount:   8 * 1024 * 1024 * 1024,
+				NUMAZone: 0,
+			},
+			nodes: sets.New[int64](0),
 			expectedNodes: map[k8stypes.UID]cpuset.CPUSet{
 				k8stypes.UID("FOOBAR"): cpuset.New(0),
 			},
@@ -150,10 +157,10 @@ func TestExtractAll(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			logger := testr.New(t)
 			envs := []string{
-				CreateSpan(logger, tcase.uid, tcase.resourceName, tcase.amount, tcase.numaNode),
+				CreateAlloc(logger, tcase.uid, tcase.alloc),
 				CreateNUMANodes(logger, tcase.uid, tcase.nodes),
 			}
-			gotNodes, gotSpans, err := ExtractAll(logger, envs, sets.New(tcase.resourceName))
+			gotNodes, gotSpans, err := ExtractAll(logger, envs, sets.New(tcase.alloc.Name()))
 			require.NoError(t, err)
 			if diff := cmp.Diff(gotNodes, tcase.expectedNodes, cmpopts.IgnoreUnexported(cpuset.CPUSet{})); diff != "" {
 				t.Errorf("unexpected value: %v", diff)
