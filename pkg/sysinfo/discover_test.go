@@ -78,8 +78,16 @@ func TestRefreshWithData(t *testing.T) {
 								hugeTLB:  false,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"memory": {
-									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
+								"size": {
+									Value: *resource.NewQuantity(33332322304, resource.BinarySI),
+									RequestPolicy: &resourceapi.CapacityRequestPolicy{
+										Default: resource.NewQuantity(1<<20, resource.BinarySI),
+										ValidRange: &resourceapi.CapacityRequestPolicyRange{
+											Min:  resource.NewQuantity(4*1<<10, resource.BinarySI),
+											Max:  resource.NewQuantity(33332322304, resource.BinarySI),
+											Step: resource.NewQuantity(4*1<<10, resource.BinarySI),
+										},
+									},
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
