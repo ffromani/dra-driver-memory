@@ -64,6 +64,10 @@ test-unit: ## run tests for all the library code, including internal
 	go test -coverprofile=coverage.out ./pkg/... ./internal/...
 
 test-e2e-base: ## run core E2E tests
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='tier0'
+
+test-e2e-kind: ## run core E2E tests suitable to run on a kind cluster
+	# TODO: add tier filtering
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind'
 
 update: ## runs go mod tidy

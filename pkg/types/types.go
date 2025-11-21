@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	resourceapi "k8s.io/api/resource/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
 )
@@ -78,10 +79,18 @@ func (ri ResourceIdent) NeedsHugeTLB() bool {
 }
 
 func (ri ResourceIdent) CapacityName() resourceapi.QualifiedName {
-	if ri.Kind == Memory {
-		return resourceapi.QualifiedName("memory")
+	// hugepages are represented as memory intentionally,
+	// to be closer to what kubelet did.
+	// We may revisit this in the future, but we don't want
+	// to diverge until and unless we have very strong reason to
+	return resourceapi.QualifiedName("size")
+}
+
+func (ri ResourceIdent) MinimumAllocatable() uint64 {
+	if ri.Kind == Hugepages {
+		return ri.Pagesize
 	}
-	return resourceapi.QualifiedName("pages")
+	return 1 << 20 // hardly makes sense to allocate less than 1 MiB on kubernetes on 2025 and onwards. And we're being very conservative.
 }
 
 // A Span is a memory area
@@ -95,6 +104,18 @@ func (sp Span) String() string {
 	return fmt.Sprintf("%s size=%s numaZone=%d", sp.Name(), unitconv.SizeInBytesToMinimizedString(uint64(sp.Amount)), sp.NUMAZone)
 }
 
+func (sp Span) Pages() int64 {
+	return int64(uint64(sp.Amount) / sp.Pagesize)
+}
+
+func (sp Span) MakeAllocation(amount int64) Allocation {
+	return Allocation{
+		ResourceIdent: sp.ResourceIdent,
+		Amount:        amount,
+		NUMAZone:      sp.NUMAZone,
+	}
+}
+
 // Currently, an Allocation currently can only be a proper subset of a Span.
 type Allocation struct {
 	ResourceIdent
@@ -104,4 +125,12 @@ type Allocation struct {
 
 func (ac Allocation) String() string {
 	return fmt.Sprintf("%s size=%s numaZone=%d", ac.Name(), unitconv.SizeInBytesToMinimizedString(uint64(ac.Amount)), ac.NUMAZone)
+}
+
+func (ac Allocation) ToQuantityString() string {
+	return resource.NewQuantity(ac.Amount, resource.BinarySI).String()
+}
+
+func (ac Allocation) Pages() int64 {
+	return int64(uint64(ac.Amount) / ac.Pagesize)
 }

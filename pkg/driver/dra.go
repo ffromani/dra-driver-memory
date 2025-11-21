@@ -157,18 +157,10 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 			}
 		}
 
-		alloc := types.Allocation{
-			ResourceIdent: types.ResourceIdent{
-				Kind:     span.Kind,
-				Pagesize: span.Pagesize,
-			},
-			Amount:   amount,
-			NUMAZone: span.NUMAZone,
-		}
+		alloc := span.MakeAllocation(amount)
+		envs = append(envs, env.CreateAlloc(lh, claim.UID, alloc))
 
-		envs = append(envs, env.CreateSpan(lh, claim.UID, alloc.Name(), alloc.Amount, alloc.NUMAZone))
-
-		lh.V(2).Info("prepareResourceClaim", "pool", devRes.Pool, "device", devRes.Device, "resource", span.Name(), "amount", alloc.Amount, "numaNode", alloc.NUMAZone)
+		lh.V(2).Info("prepareResourceClaim", "device", devRes.Device, "resource", alloc.Name(), "amountBytes", alloc.Amount, "amount", alloc.ToQuantityString(), "numaNode", alloc.NUMAZone)
 		claimAllocs[alloc.Name()] = alloc
 		claimNodes.Insert(alloc.NUMAZone)
 		preparedDevices = append(preparedDevices, kubeletplugin.Device{

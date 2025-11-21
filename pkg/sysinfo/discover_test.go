@@ -44,7 +44,60 @@ func TestRefreshWithData(t *testing.T) {
 
 	testcases := []testcase{
 		{
-			name: "single NUMA-node",
+			name: "single NUMA-node, no hugepages",
+			machine: MachineData{
+				Pagesize: 4096,
+				Zones: []Zone{
+					{
+						ID:        0,
+						Distances: []int{10},
+						Memory: &ghwmemory.Area{
+							TotalPhysicalBytes: 34225520640,
+							TotalUsableBytes:   33332322304,
+							SupportedPageSizes: []uint64{
+								1073741824,
+								2097152,
+							},
+							DefaultHugePageSize: 2097152,
+						},
+					},
+				},
+			},
+			makeDeviceName: func(devName string) string {
+				return devName + "-XXXXXX"
+			},
+			expectedResNames: []string{"memory"},
+			expectedSlices: []resourceslice.Slice{
+				{
+					Devices: []resourceapi.Device{
+						{
+							Name: "memory-XXXXXX",
+							Attributes: makeAttributes(attrInfo{
+								numaNode: 0,
+								sizeName: "4k",
+								hugeTLB:  false,
+							}),
+							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
+								"size": {
+									Value: *resource.NewQuantity(33332322304, resource.BinarySI),
+									RequestPolicy: &resourceapi.CapacityRequestPolicy{
+										Default: resource.NewQuantity(1<<20, resource.BinarySI),
+										ValidRange: &resourceapi.CapacityRequestPolicyRange{
+											Min:  resource.NewQuantity(4*1<<10, resource.BinarySI),
+											Max:  resource.NewQuantity(33332322304, resource.BinarySI),
+											Step: resource.NewQuantity(4*1<<10, resource.BinarySI),
+										},
+									},
+								},
+							},
+							AllowMultipleAllocations: ptr.To(true),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "single NUMA-node, with hugepages",
 			machine: MachineData{
 				Pagesize: 4096,
 				Zones: []Zone{
@@ -60,8 +113,12 @@ func TestRefreshWithData(t *testing.T) {
 							},
 							DefaultHugePageSize: 2097152,
 							HugePageAmountsBySize: map[uint64]*ghwmemory.HugePageAmounts{
-								1073741824: {},
-								2097152:    {},
+								1073741824: {
+									Total: 8,
+								},
+								2097152: {
+									Total: 2048,
+								},
 							},
 						},
 					},
@@ -82,8 +139,16 @@ func TestRefreshWithData(t *testing.T) {
 								hugeTLB:  true,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"pages": {
-									Value: *resource.NewQuantity(0, resource.DecimalSI),
+								"size": {
+									Value: *resource.NewQuantity(8589934592, resource.BinarySI),
+									RequestPolicy: &resourceapi.CapacityRequestPolicy{
+										Default: resource.NewQuantity(1<<30, resource.BinarySI),
+										ValidRange: &resourceapi.CapacityRequestPolicyRange{
+											Min:  resource.NewQuantity(1<<30, resource.BinarySI),
+											Max:  resource.NewQuantity(8589934592, resource.BinarySI),
+											Step: resource.NewQuantity(1<<30, resource.BinarySI),
+										},
+									},
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
@@ -100,8 +165,16 @@ func TestRefreshWithData(t *testing.T) {
 								hugeTLB:  true,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"pages": {
-									Value: *resource.NewQuantity(0, resource.DecimalSI),
+								"size": {
+									Value: *resource.NewQuantity(4294967296, resource.BinarySI),
+									RequestPolicy: &resourceapi.CapacityRequestPolicy{
+										Default: resource.NewQuantity(2*1<<20, resource.BinarySI),
+										ValidRange: &resourceapi.CapacityRequestPolicyRange{
+											Min:  resource.NewQuantity(2*1<<20, resource.BinarySI),
+											Max:  resource.NewQuantity(4294967296, resource.BinarySI),
+											Step: resource.NewQuantity(2*1<<20, resource.BinarySI),
+										},
+									},
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),
@@ -118,8 +191,16 @@ func TestRefreshWithData(t *testing.T) {
 								hugeTLB:  false,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
-								"memory": {
-									Value: *resource.NewQuantity(33332322304, resource.DecimalSI),
+								"size": {
+									Value: *resource.NewQuantity(33332322304, resource.BinarySI),
+									RequestPolicy: &resourceapi.CapacityRequestPolicy{
+										Default: resource.NewQuantity(1<<20, resource.BinarySI),
+										ValidRange: &resourceapi.CapacityRequestPolicyRange{
+											Min:  resource.NewQuantity(4*1<<10, resource.BinarySI),
+											Max:  resource.NewQuantity(33332322304, resource.BinarySI),
+											Step: resource.NewQuantity(4*1<<10, resource.BinarySI),
+										},
+									},
 								},
 							},
 							AllowMultipleAllocations: ptr.To(true),

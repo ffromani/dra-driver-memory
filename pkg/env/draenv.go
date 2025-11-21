@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/cpuset"
@@ -41,11 +42,11 @@ func CreateNUMANodes(_ logr.Logger, claimUID k8stypes.UID, claimNodes sets.Set[i
 	return fmt.Sprintf("%s_%s_%s=%s", cdi.EnvVarPrefix, claimUID, partNUMANodes, numaNodesToString(claimNodes))
 }
 
-func CreateSpan(_ logr.Logger, claimUID k8stypes.UID, resourceName string, amount, numaNode int64) string {
-	return fmt.Sprintf("%s_%s_%s=size:%d,numanode:%d", cdi.EnvVarPrefix, claimUID, resourceNameToEnv(resourceName), amount, numaNode)
+func CreateAlloc(_ logr.Logger, claimUID k8stypes.UID, alloc types.Allocation) string {
+	return fmt.Sprintf("%s_%s_%s=numanode:%d,size:%s", cdi.EnvVarPrefix, claimUID, resourceNameToEnv(alloc.Name()), alloc.NUMAZone, alloc.ToQuantityString())
 }
 
-func ExtractNUMANodesTo(lh logr.Logger, env string, numaNodesByClaim map[k8stypes.UID]cpuset.CPUSet) (bool, error) {
+func ExtractNUMANodesInto(lh logr.Logger, env string, numaNodesByClaim map[k8stypes.UID]cpuset.CPUSet) (bool, error) {
 	parts := strings.SplitN(env, "=", 2)
 	if len(parts) != 2 {
 		return false, fmt.Errorf("malformed DRA env entry %q", env)
@@ -69,7 +70,7 @@ func ExtractNUMANodesTo(lh logr.Logger, env string, numaNodesByClaim map[k8stype
 	return true, nil
 }
 
-func ExtractAllocsTo(lh logr.Logger, env string, resourceNames sets.Set[string], allocsByClaim map[k8stypes.UID]types.Allocation) (bool, error) {
+func ExtractAllocsInto(lh logr.Logger, env string, resourceNames sets.Set[string], allocsByClaim map[k8stypes.UID]types.Allocation) (bool, error) {
 	parts := strings.SplitN(env, "=", 2)
 	if len(parts) != 2 {
 		return false, fmt.Errorf("malformed DRA env entry %q", env)
@@ -90,16 +91,12 @@ func ExtractAllocsTo(lh logr.Logger, env string, resourceNames sets.Set[string],
 	if err != nil {
 		return false, err
 	}
-	var amount int64
-	var numaNode int64
-	n, err := fmt.Sscanf(value, "size:%d,numanode:%d", &amount, &numaNode)
-	if n != 2 || err != nil {
-		return false, fmt.Errorf("malformed DRA env value %q: %w", value, err)
-	}
 	alloc := types.Allocation{
 		ResourceIdent: ident,
-		Amount:        amount,
-		NUMAZone:      numaNode,
+	}
+	err = extractAllocValueInto(value, &alloc)
+	if err != nil {
+		return false, err
 	}
 	allocsByClaim[claimUID] = alloc
 	lh.V(4).Info("parsed allocation", "claimUID", claimUID, "resourceName", alloc.Name(), "amount", alloc.Amount, "NUMANode", alloc.NUMAZone)
@@ -116,11 +113,11 @@ func ExtractAll(lh logr.Logger, envs []string, resourceNames sets.Set[string]) (
 		}
 		lh.V(4).Info("Parsing DRA env", "entry", env)
 		// we will ignore errors related to envs we didn't set: these are not significant
-		found, err := ExtractNUMANodesTo(lh, env, numaNodesByClaim)
+		found, err := ExtractNUMANodesInto(lh, env, numaNodesByClaim)
 		if found && err != nil {
 			return nil, nil, err
 		}
-		found, err = ExtractAllocsTo(lh, env, resourceNames, allocsByClaim)
+		found, err = ExtractAllocsInto(lh, env, resourceNames, allocsByClaim)
 		if found && err != nil {
 			return nil, nil, err
 		}
@@ -144,4 +141,24 @@ func resourceNameToEnv(resourceName string) string {
 
 func envToResourceName(ev string) string {
 	return strings.ReplaceAll(ev, "_", "-")
+}
+
+func extractAllocValueInto(value string, alloc *types.Allocation) error {
+	var allocStr string
+	var numaNode int64
+	n, err := fmt.Sscanf(value, "numanode:%d,size:%s", &numaNode, &allocStr)
+	if n != 2 || err != nil {
+		return fmt.Errorf("malformed DRA env value %q: %w", value, err)
+	}
+	qty, err := resource.ParseQuantity(allocStr)
+	if err != nil {
+		return fmt.Errorf("malformed DRA env size %q: %w", value, err)
+	}
+	amount, ok := qty.AsInt64()
+	if !ok {
+		return fmt.Errorf("cannot convert DRA env amount %v: %w", qty.String(), err)
+	}
+	alloc.Amount = amount
+	alloc.NUMAZone = numaNode
+	return nil
 }

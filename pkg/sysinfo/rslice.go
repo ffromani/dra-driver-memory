@@ -51,10 +51,19 @@ func MakeAttributes(sp types.Span) map[resourceapi.QualifiedName]resourceapi.Dev
 
 func MakeCapacity(sp types.Span) map[resourceapi.QualifiedName]resourceapi.DeviceCapacity {
 	name := sp.CapacityName()
-	qty := resource.NewQuantity(sp.Amount, resource.DecimalSI)
+	capQty := resource.NewQuantity(sp.Amount, resource.BinarySI)
+	stepQty := resource.NewQuantity(int64(sp.Pagesize), resource.BinarySI)
 	return map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
 		name: {
-			Value: *qty,
+			Value: *capQty,
+			RequestPolicy: &resourceapi.CapacityRequestPolicy{
+				Default: resource.NewQuantity(int64(sp.MinimumAllocatable()), resource.BinarySI),
+				ValidRange: &resourceapi.CapacityRequestPolicyRange{
+					Min:  stepQty,
+					Step: stepQty,
+					Max:  capQty,
+				},
+			},
 		},
 	}
 }

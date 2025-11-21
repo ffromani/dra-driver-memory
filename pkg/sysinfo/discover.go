@@ -117,6 +117,10 @@ func sortedHugepageSizes(nodeInfo Zone) []uint64 {
 }
 
 func (ds *Discoverer) processMemory(lh logr.Logger, pageSize uint64, numaNode int64, nodeInfo Zone) {
+	if nodeInfo.Memory.TotalUsableBytes == 0 {
+		lh.V(4).Info("discovery: no usable memory detected, skipped", "numaNode", numaNode)
+		return
+	}
 	span := types.Span{
 		ResourceIdent: types.ResourceIdent{
 			Kind:     types.Memory,
@@ -133,13 +137,17 @@ func (ds *Discoverer) processMemory(lh logr.Logger, pageSize uint64, numaNode in
 }
 
 func (ds *Discoverer) processHugepages(lh logr.Logger, hpSize uint64, numaNode int64, nodeInfo Zone) {
-	amounts := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
+	amounts, ok := nodeInfo.Memory.HugePageAmountsBySize[hpSize]
+	if !ok || amounts.Total == 0 {
+		lh.V(4).Info("discovery: no hugepages detected, skipped", "numaNode", numaNode, "hugepageSize", hpSize)
+		return
+	}
 	span := types.Span{
 		ResourceIdent: types.ResourceIdent{
 			Kind:     types.Hugepages,
 			Pagesize: hpSize,
 		},
-		Amount:   amounts.Total,
+		Amount:   int64(hpSize) * amounts.Total,
 		NUMAZone: numaNode,
 	}
 	hpDevice := ToDevice(span)
