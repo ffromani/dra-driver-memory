@@ -32,22 +32,6 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/node"
 )
 
-/*
-gingko flags explained:
-
-- Serial:
-because the tests want to change the memory allocation, which is a giant blob of node shared state.
-- Ordered:
-to do the relatively costly initial resource discovery on the target node only once
-- ContinueOnFailure
-to mitigate the problem that ordered suites stop on the first failure, so an initial failure can mask
-a cascade of latter failure; this makes the tests failure troubleshooting painful, as we would need
-to fix failures one by one vs in batches.
-
-Note that using "Ordered" may introduce subtle bugs caused by incorrect tests which pollute or leak
-state. We should keep looking for ways to eventually remove "Ordered".
-Please note "Serial" is however unavoidable because we manage the shared node state.
-*/
 var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("setup"), func() {
 	var rootFxt *fixture.Fixture
 	var targetNode *v1.Node
@@ -81,12 +65,18 @@ var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.C
 
 	ginkgo.When("running on kind", ginkgo.Label("platform:kind"), func() {
 		var fxt *fixture.Fixture
+
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			fxt = rootFxt.WithPrefix("kind")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
 		})
 
+		ginkgo.AfterEach(func(ctx context.Context) {
+			gomega.Expect(fxt.Teardown(ctx)).To(gomega.Succeed())
+		})
+
 		ginkgo.It("should configure HugeTLB support", func(ctx context.Context) {
+			fixture.By("getting the containerd configuration for target node %q", targetNode.Name)
 			// the awk part combines grep and tail. We store all the entries, we emit the last stored once `awk` ends.
 			// note we sneak in another optimization: we only return the `config={...}` portion column 11. A line would look like:
 			// columns:

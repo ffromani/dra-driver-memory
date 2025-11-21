@@ -24,7 +24,7 @@ jobs:
     - name: Create and setup K8S kind cluster
       run: make ci-kind-setup
     - name: Run E2E tests
-      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-base
+      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind
     - name: Show logs on failure
       if: ${{ failure() }}
       run: |
