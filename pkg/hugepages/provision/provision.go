@@ -8,8 +8,6 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
-	ghwopt "github.com/jaypipes/ghw/pkg/option"
-	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	"sigs.k8s.io/yaml"
 
@@ -18,7 +16,7 @@ import (
 
 func ReadConfiguration(source string) (apiv0.HugePageProvision, error) {
 	if source == "-" {
-		return readConfigurationFrom(os.Stdin)
+		return ReadConfigurationFrom(os.Stdin)
 	}
 	src, err := os.Open(source)
 	if err != nil {
@@ -26,33 +24,24 @@ func ReadConfiguration(source string) (apiv0.HugePageProvision, error) {
 	}
 	//nolint:errcheck
 	defer src.Close()
-	return readConfigurationFrom(src)
+	return ReadConfigurationFrom(src)
 }
 
-func RuntimeHugepages(logger logr.Logger, hpp apiv0.HugePageProvision, sysRoot string) error {
+func RuntimeHugepages(logger logr.Logger, hpp apiv0.HugePageProvision, sysRoot string, numaZones int) error {
 	logger.V(2).Info("start provisioning hugepages", "groups", len(hpp.Spec.Pages))
 	defer logger.V(2).Info("done provisioning hugepages", "groups", len(hpp.Spec.Pages))
 
-	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(sysRoot))
-	if err != nil {
-		return err
-	}
-
 	for _, conf := range hpp.Spec.Pages {
 		var err error
-
-		if len(sysinfo.Nodes) == 1 {
-			numaNode := 0
-			if conf.Node != nil {
-				numaNode = int(*conf.Node)
-			}
-			logger.V(2).Info("provisioning pages", "numaNode", numaNode, "count", conf.Count, "size", conf.Size)
+		// can't be lower on machines >= 2025
+		if numaZones == 1 {
+			numaNode := pickNode(conf)
+			logger.V(0).Info("provisioning pages", "numaNode", numaNode, "count", conf.Count, "size", conf.Size)
 			err = provisionOnNode(logger, numaNode, int(conf.Count), conf.Size, sysRoot)
 		} else {
-			logger.V(2).Info("splitting pages", "count", conf.Count, "NUMACount", len(sysinfo.Nodes))
-			err = provisionOnMultiNode(logger, len(sysinfo.Nodes), int(conf.Count), conf.Size, sysRoot)
+			logger.V(0).Info("splitting pages", "count", conf.Count, "NUMACount", numaZones)
+			err = provisionOnMultiNode(logger, numaZones, int(conf.Count), conf.Size, sysRoot)
 		}
-
 		if err != nil {
 			return err
 		}
@@ -85,7 +74,7 @@ func provisionOnNode(logger logr.Logger, numaNode, hpCount int, apiHpSize apiv0.
 		return err
 	}
 	hpPath := filepath.Join(sysRoot, "sys", "devices", "system", "node", fmt.Sprintf("node%d", numaNode), "hugepages", "hugepages-"+hpSize, "nr_hugepages")
-	logger.V(4).Info("writing on sysfs", "path", hpPath)
+	logger.V(0).Info("writing on sysfs", "path", hpPath)
 	dst, err := os.OpenFile(hpPath, os.O_WRONLY, 0)
 	if err != nil {
 		return err
@@ -96,10 +85,11 @@ func provisionOnNode(logger logr.Logger, numaNode, hpCount int, apiHpSize apiv0.
 	if err != nil {
 		return fmt.Errorf("failed to write on %q: %w", hpPath, err)
 	}
+	logger.V(0).Info("wrote on sysfs", "path", hpPath, "pages", hpCount)
 	return err
 }
 
-func readConfigurationFrom(r io.Reader) (apiv0.HugePageProvision, error) {
+func ReadConfigurationFrom(r io.Reader) (apiv0.HugePageProvision, error) {
 	hpp := apiv0.HugePageProvision{}
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -107,4 +97,11 @@ func readConfigurationFrom(r io.Reader) (apiv0.HugePageProvision, error) {
 	}
 	err = yaml.Unmarshal(data, &hpp)
 	return hpp, err
+}
+
+func pickNode(hp apiv0.HugePage) int {
+	if hp.Node == nil {
+		return 0
+	}
+	return int(*hp.Node)
 }

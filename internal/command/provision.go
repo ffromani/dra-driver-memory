@@ -18,16 +18,22 @@ package command
 
 import (
 	"github.com/go-logr/logr"
+	ghwopt "github.com/jaypipes/ghw/pkg/option"
+	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	"github.com/ffromani/dra-driver-memory/pkg/hugepages/provision"
 )
 
 func ProvisionHugepages(params Params, setupLogger logr.Logger) error {
+	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+	if err != nil {
+		return err
+	}
 	config, err := provision.ReadConfiguration(params.HugePages.RuntimeProvisionConfig)
 	if err != nil {
 		return err
 	}
-	err = provision.RuntimeHugepages(setupLogger, config, params.SysRoot)
+	err = provision.RuntimeHugepages(setupLogger, config, params.SysRoot, len(sysinfo.Nodes))
 	if err != nil {
 		return err
 	}
