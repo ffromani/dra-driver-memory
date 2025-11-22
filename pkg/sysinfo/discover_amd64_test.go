@@ -1,3 +1,5 @@
+//go:build amd64
+
 /*
  * Copyright 2025 The Kubernetes Authors
  *
@@ -31,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	"k8s.io/utils/ptr"
+
+	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
 func TestRefreshWithData(t *testing.T) {
@@ -229,6 +233,10 @@ func TestRefreshWithData(t *testing.T) {
 			}
 			err := disc.Refresh(logger)
 			require.NoError(t, err)
+			gotMachineData := disc.MachineData()
+			if diff := cmp.Diff(gotMachineData, tcase.machine); diff != "" {
+				t.Fatalf("unexpected fetched machinedata: %v", diff)
+			}
 
 			gotResNames := sets.List(disc.AllResourceNames())
 			if diff := cmp.Diff(gotResNames, tcase.expectedResNames); diff != "" {
@@ -244,6 +252,79 @@ func TestRefreshWithData(t *testing.T) {
 			})
 			if diff := cmp.Diff(gotSlices, tcase.expectedSlices); diff != "" {
 				t.Errorf("unexpected resourceslice: %s", diff)
+			}
+		})
+	}
+}
+
+func TestGetSpanForDevice(t *testing.T) {
+	type testcase struct {
+		name           string
+		machine        MachineData
+		makeDeviceName func(string) string
+		devName        string
+		expected       types.Span
+	}
+
+	testcases := []testcase{
+		{
+			name: "single NUMA-node, no hugepages",
+			machine: MachineData{
+				Pagesize: 4096,
+				Zones: []Zone{
+					{
+						ID:        0,
+						Distances: []int{10},
+						Memory: &ghwmemory.Area{
+							TotalPhysicalBytes: 34225520640,
+							TotalUsableBytes:   33332322304,
+							SupportedPageSizes: []uint64{
+								1073741824,
+								2097152,
+							},
+							DefaultHugePageSize: 2097152,
+						},
+					},
+				},
+			},
+			makeDeviceName: func(devName string) string {
+				return devName + "-XXXXXX"
+			},
+			devName: "memory-XXXXXX",
+			expected: types.Span{
+				ResourceIdent: types.ResourceIdent{
+					Kind:     types.Memory,
+					Pagesize: 4096,
+				},
+				Amount:   int64(33332322304),
+				NUMAZone: 0,
+			},
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			fakeSysRoot := t.TempDir()
+
+			saveMakeDeviceName := MakeDeviceName
+			t.Cleanup(func() {
+				MakeDeviceName = saveMakeDeviceName
+			})
+			MakeDeviceName = tcase.makeDeviceName
+
+			logger := testr.New(t)
+
+			disc := NewDiscoverer(fakeSysRoot) // not really needed, but let's be clean
+			disc.GetMachineData = func(_ logr.Logger, _ string) (MachineData, error) {
+				return tcase.machine, nil
+			}
+			err := disc.Refresh(logger)
+			require.NoError(t, err)
+
+			span, err := disc.GetSpanForDevice(logger, tcase.devName)
+			require.NoError(t, err)
+			if diff := cmp.Diff(span, tcase.expected); diff != "" {
+				t.Fatalf("unexpected span: %v", diff)
 			}
 		})
 	}
