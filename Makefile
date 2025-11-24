@@ -88,7 +88,7 @@ IMAGE_NAME=dra-driver-memory
 REGISTRY := quay.io/fromani
 # this is an intentionally non-existent registry to be used only by local CI using the local image loading
 REGISTRY_CI := dev.kind.local/ci
-STAGING_IMAGE_NAME := ${REGISTRY}/${STAGING_REPO_NAME}/${IMAGE_NAME}
+STAGING_IMAGE_NAME := ${REGISTRY}/${IMAGE_NAME}
 TESTING_IMAGE_NAME := ${REGISTRY}/${IMAGE_NAME}-test
 # tag based on date-sha
 GIT_VERSION := $(shell date +v%Y%m%d)-$(shell git rev-parse --short HEAD)
