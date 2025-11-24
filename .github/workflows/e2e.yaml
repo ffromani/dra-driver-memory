@@ -29,3 +29,27 @@ jobs:
       if: ${{ failure() }}
       run: |
         kubectl get pods -A -o wide
+  e2e-hugepages-2m:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup golang
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+    - name: Create setup
+      run: make
+    - name: Provision 2M hugepages
+      run: sudo ./bin/dramemory -hugepages-provision ./hack/ci/hugepages-2M.yaml
+    - name: Hugepages provision feedback check
+      run: ./bin/dramemory -inspect
+    - name: Kind version check
+      run: kind version
+    - name: Create and setup K8S kind cluster
+      run: make ci-kind-setup
+    - name: Run E2E tests
+      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind-hp
+    - name: Show logs on failure
+      if: ${{ failure() }}
+      run: |
+        kubectl get pods -A -o wide

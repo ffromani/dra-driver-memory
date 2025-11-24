@@ -70,6 +70,10 @@ test-e2e-kind: ## run core E2E tests suitable to run on a kind cluster
 	# TODO: add tier filtering
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind'
 
+test-e2e-kind-hp: ## run core E2E tests suitable to run on a kind cluster with hugepages provisioned
+	# TODO: add tier filtering
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:2M'
+
 update: ## runs go mod tidy
 	go mod tidy
 
