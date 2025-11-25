@@ -70,6 +70,10 @@ test-e2e-kind: ## run core E2E tests suitable to run on a kind cluster
 	# TODO: add tier filtering
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind'
 
+test-e2e-kind-hp: ## run core E2E tests suitable to run on a kind cluster with hugepages provisioned
+	# TODO: add tier filtering
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:2M'
+
 update: ## runs go mod tidy
 	go mod tidy
 
@@ -128,6 +132,7 @@ ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 	kind create cluster --name ${CLUSTER_NAME} --config hack/ci/kind-ci.yaml
 	kubectl label node ${CLUSTER_NAME}-worker node-role.kubernetes.io/worker=''
 	kind load docker-image --name ${CLUSTER_NAME} ${IMAGE_CI}
+	hack/ci/wait-worker-nodes.sh
 	kubectl create -f hack/ci/install-ci.yaml
 	hack/ci/wait-resourcelices.sh
 

@@ -18,8 +18,10 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
 
+	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
@@ -27,6 +29,7 @@ import (
 	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 
 	"github.com/ffromani/dra-driver-memory/test/pkg/fixture"
@@ -34,7 +37,7 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/pod"
 )
 
-var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("tier0", "memory", "allocation", "platform:kind"), func() {
+var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("tier0", "hugepages:2M", "allocation", "platform:kind"), func() {
 	var rootFxt *fixture.Fixture
 	var targetNode *corev1.Node
 	var dramemoryTesterImage string
@@ -63,13 +66,19 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			targetNode = workerNodes[0] // pick random one, this is the simplest random pick
 		}
 		rootFxt.Log.Info("using worker node", "nodeName", targetNode.Name)
+
+		rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(rootFxt.Log, ctx, rootFxt.K8SClientset, targetNode.Name, "2m", 32*(1<<20))
+		if !ok {
+			ginkgo.Skip("missing hugepages in resource slices")
+		}
+		rootFxt.Log.Info("found 2M hugepages device", "resourceSlice", rsName, "device", devName)
 	})
 
-	ginkgo.When("requesting memory", func() {
+	ginkgo.When("requesting hugepages", func() {
 		var fxt *fixture.Fixture
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
-			fxt = rootFxt.WithPrefix("allocmem")
+			fxt = rootFxt.WithPrefix("allochp")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
 		})
 
@@ -82,19 +91,19 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "memory-256m",
+					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as reequired
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
 						Devices: resourcev1.DeviceClaim{
 							Requests: []resourcev1.DeviceRequest{
 								{
-									Name: "mem",
+									Name: "hp2m",
 									Exactly: &resourcev1.ExactDeviceRequest{
-										DeviceClassName: "dra.memory",
+										DeviceClassName: "dra.hugepages-2m",
 										Capacity: &resourcev1.CapacityRequirements{
 											Requests: map[resourcev1.QualifiedName]resource.Quantity{
-												resourcev1.QualifiedName("size"): *resource.NewQuantity(256*(1<<20), resource.BinarySI),
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(32*(1<<20), resource.BinarySI),
 											},
 										},
 									},
@@ -113,7 +122,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			testPod := corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "pod-with-memory",
+					Name:      "pod-with-hugepages-2m",
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -128,7 +137,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 								},
 								Claims: []corev1.ResourceClaim{
 									{
-										Name: "mem",
+										Name: "hp2m",
 									},
 								},
 							},
@@ -136,8 +145,8 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					},
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
-							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-256m"),
+							Name:                      "hp2m",
+							ResourceClaimTemplateName: ptr.To("hugepages-32m"),
 						},
 					},
 				},
@@ -149,3 +158,62 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 		})
 	})
 })
+
+func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context, cs kubernetes.Interface, nodeName, size string, amount int64) (string, string, bool) {
+	resourceSliceList, err := cs.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
+	})
+	if err != nil {
+		lh.Error(err, "cannot list resourceslices", "nodeName", nodeName)
+		return "", "", false
+	}
+	lh.Info("checking resource slices", "count", len(resourceSliceList.Items))
+	desiredQty := *resource.NewQuantity(amount, resource.BinarySI)
+	for idx := range resourceSliceList.Items {
+		resourceSlice := &resourceSliceList.Items[idx]
+		lh.Info("checking resource slices", "name", resourceSlice.Name)
+		rdev := findHugepages2MDeviceInSlice(lh, resourceSlice)
+		if rdev == nil {
+			lh.Info("missing 2M hugepages in resource slice", "name", resourceSlice.Name)
+			continue // go to the next slice
+		}
+		lh.Info("found 2M hugepages in resource slice", "name", resourceSlice.Name, "deviceName", rdev.Name)
+		size, ok := rdev.Capacity[resourcev1.QualifiedName("size")]
+		if !ok {
+			lh.Info("device 2M hugepages in resource slice lacks capacity", "name", resourceSlice.Name, "deviceName", rdev.Name)
+			continue // how come?
+		}
+		if size.Value.Cmp(desiredQty) < 0 {
+			lh.Info("device 2M hugepages in resource slice has not enough capacity", "name", resourceSlice.Name, "deviceName", rdev.Name, "capacityCurrent", size.Value.String(), "capacityDesired", desiredQty.String())
+			continue
+		}
+		return resourceSlice.Name, rdev.Name, true
+	}
+	return "", "", false
+}
+
+func findHugepages2MDeviceInSlice(lh logr.Logger, resourceSlice *resourcev1.ResourceSlice) *resourcev1.Device {
+	for idx := range resourceSlice.Spec.Devices {
+		rdev := &resourceSlice.Spec.Devices[idx]
+		lh.Info("checking device", "resourceSlice", resourceSlice.Name, "deviceName", rdev.Name)
+		if isHugepage2MByAttributes(lh.WithValues("deviceName", rdev.Name), rdev.Attributes) {
+			return rdev
+		}
+	}
+	return nil
+}
+
+func isHugepage2MByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]resourcev1.DeviceAttribute) bool {
+	lh.Info("inspecting", "attributes", attrs)
+	val, ok := attrs[resourcev1.QualifiedName("resource.kubernetes.io/hugeTLB")]
+	if !ok || val.BoolValue == nil || !*val.BoolValue {
+		return false
+	}
+	lh.Info("hugeTLB enabled")
+	val, ok = attrs[resourcev1.QualifiedName("resource.kubernetes.io/pageSize")]
+	if !ok || val.StringValue == nil || *val.StringValue != "2m" {
+		return false
+	}
+	lh.Info("attribute match")
+	return true
+}
