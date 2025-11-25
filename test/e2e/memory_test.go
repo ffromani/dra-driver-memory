@@ -94,7 +94,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 										DeviceClassName: "dra.memory",
 										Capacity: &resourcev1.CapacityRequirements{
 											Requests: map[resourcev1.QualifiedName]resource.Quantity{
-												resourcev1.QualifiedName("size"): *resource.NewQuantity(256*1<<20, resource.BinarySI),
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(256*(1<<20), resource.BinarySI),
 											},
 										},
 									},
