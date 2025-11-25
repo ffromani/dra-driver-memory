@@ -132,6 +132,7 @@ ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 	kind create cluster --name ${CLUSTER_NAME} --config hack/ci/kind-ci.yaml
 	kubectl label node ${CLUSTER_NAME}-worker node-role.kubernetes.io/worker=''
 	kind load docker-image --name ${CLUSTER_NAME} ${IMAGE_CI}
+	hack/ci/wait-worker-nodes.sh
 	kubectl create -f hack/ci/install-ci.yaml
 	hack/ci/wait-resourcelices.sh
 
