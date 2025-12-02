@@ -73,8 +73,8 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.MachineData(), allocs) {
-		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
+	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.GetCachedMachineData(), allocs) {
+		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit.Value) // MUST be set
 	}
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())

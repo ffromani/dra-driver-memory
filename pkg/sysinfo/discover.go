@@ -58,8 +58,12 @@ func (ds *Discoverer) AllResourceNames() sets.Set[string] {
 	return resourceNames
 }
 
-func (ds *Discoverer) MachineData() MachineData {
+func (ds *Discoverer) GetCachedMachineData() MachineData {
 	return ds.machineData
+}
+
+func (ds *Discoverer) GetFreshMachineData(lh logr.Logger) (MachineData, error) {
+	return ds.GetMachineData(lh, ds.sysRoot)
 }
 
 func (ds *Discoverer) GetSpanForDevice(lh logr.Logger, devName string) (types.Span, error) {
