@@ -49,11 +49,15 @@ func TestLimitsFromAllocation(t *testing.T) {
 			expected: []Limit{
 				{
 					PageSize: "2MB",
-					Limit:    0,
+					Limit: LimitValue{
+						Value: 0,
+					},
 				},
 				{
 					PageSize: "1GB",
-					Limit:    0,
+					Limit: LimitValue{
+						Value: 0,
+					},
 				},
 			},
 		},
@@ -73,11 +77,15 @@ func TestLimitsFromAllocation(t *testing.T) {
 			expected: []Limit{
 				{
 					PageSize: "2MB",
-					Limit:    128 * 2 * (1 << 20),
+					Limit: LimitValue{
+						Value: 128 * 2 * (1 << 20),
+					},
 				},
 				{
 					PageSize: "1GB",
-					Limit:    0,
+					Limit: LimitValue{
+						Value: 0,
+					},
 				},
 			},
 		},
@@ -97,11 +105,15 @@ func TestLimitsFromAllocation(t *testing.T) {
 			expected: []Limit{
 				{
 					PageSize: "2MB",
-					Limit:    0,
+					Limit: LimitValue{
+						Value: 0,
+					},
 				},
 				{
 					PageSize: "1GB",
-					Limit:    4 * (1 << 30),
+					Limit: LimitValue{
+						Value: 4 * (1 << 30),
+					},
 				},
 			},
 		},
