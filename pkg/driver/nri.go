@@ -18,8 +18,10 @@ package driver
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/containerd/nri/pkg/api"
+	"github.com/go-logr/logr"
 
 	"k8s.io/utils/cpuset"
 
@@ -36,6 +38,7 @@ func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbo
 	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
 	// TODO: restore the internal state
 	return nil, nil
 }
@@ -45,6 +48,15 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	lh = lh.WithName("CreateContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
+	cgroupParent, ok := mdrv.cgPathByPOD[pod.Uid]
+	if ok {
+		// TODO: this was initially introduced out of caution to handle pod sandbox creation race, which
+		// are however unlikely (or impossible?). Deferring the pod-level setting at container level would
+		// however allowing us to set more precise pod-level limits. This is something we can explore in the future.
+		lh.V(2).Info("setting deferred pod cgroup limit", "podUID", pod.Uid, "cgroupParent", cgroupParent)
+		_ = mdrv.setPodLimits(lh, cgroupParent)
+	}
 
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
@@ -73,8 +85,8 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	}
 
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.MachineData(), allocs) {
-		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit)
+	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.GetCachedMachineData(), allocs) {
+		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit.Value) // MUST be set
 	}
 
 	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
@@ -90,6 +102,7 @@ func (mdrv *MemoryDriver) StopContainer(ctx context.Context, pod *api.PodSandbox
 	lh = lh.WithName("StopContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
 	return nil, nil
 }
 
@@ -98,6 +111,7 @@ func (mdrv *MemoryDriver) RemoveContainer(ctx context.Context, pod *api.PodSandb
 	lh = lh.WithName("RemoveContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
 	return nil
 }
 
@@ -106,6 +120,12 @@ func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox
 	lh = lh.WithName("RunPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
+	err := mdrv.setPodLimits(lh, pod.Linux.CgroupParent)
+	if err != nil {
+		mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
+		lh.V(2).Info("deferring pod limits settings", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
+	}
 	return nil
 }
 
@@ -114,6 +134,8 @@ func (mdrv *MemoryDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbo
 	lh = lh.WithName("StopPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
+	delete(mdrv.cgPathByPOD, pod.Uid)
 	return nil
 }
 
@@ -122,6 +144,20 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
+
 	mdrv.allocMgr.UnregisterClaimsForPod(lh, pod.Id)
+	return nil
+}
+
+func (mdrv *MemoryDriver) setPodLimits(lh logr.Logger, cgroupParent string) error {
+	if mdrv.cgMount == "" {
+		return nil // nothing to do
+	}
+	cgPath := filepath.Join(mdrv.cgMount, cgroupParent)
+	err := hugepages.SetSystemLimits(lh, cgPath, mdrv.hpRootLimits)
+	if err != nil {
+		lh.V(2).Error(err, "failed to set pod cgroup limits", "root", mdrv.cgMount, "path", cgroupParent)
+		return err
+	}
 	return nil
 }

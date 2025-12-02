@@ -117,17 +117,16 @@ spec:
           command:
             - /bin/dramemory
           args:
-            - -v=6
-            - -cgroup-mount=/sys/fs/cgroup
+            - --v=6
           image: quay.io/ffromani/dramem:latest
           imagePullPolicy: IfNotPresent
           resources:
             requests:
-              cpu: "100m"
-              memory: "200Mi"
+              memory: "100m"
+              memory: "50Mi"
           securityContext:
-            privileged: true
-            runAsUser: 0
+            capabilities:
+              add: ["NET_ADMIN", "SYS_ADMIN"]
           volumeMounts:
             - name: device-plugin
               mountPath: /var/lib/kubelet/plugins
@@ -137,9 +136,6 @@ spec:
               mountPath: /var/run/nri
             - name: cdi-dir
               mountPath: /var/run/cdi
-            - name: cgroupfs
-              mountPath: /sys/fs/cgroup
-              mountPropagation: HostToContainer
       volumes:
         - name: device-plugin
           hostPath:
@@ -154,9 +150,6 @@ spec:
           hostPath:
             path: /var/run/cdi
             type: DirectoryOrCreate
-        - name: cgroupfs
-          hostPath:
-            path: /sys/fs/cgroup
         - name: etc
           hostPath:
             path: /etc

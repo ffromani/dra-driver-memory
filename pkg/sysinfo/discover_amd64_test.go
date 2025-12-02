@@ -233,7 +233,7 @@ func TestRefreshWithData(t *testing.T) {
 			}
 			err := disc.Refresh(logger)
 			require.NoError(t, err)
-			gotMachineData := disc.MachineData()
+			gotMachineData := disc.GetCachedMachineData()
 			if diff := cmp.Diff(gotMachineData, tcase.machine); diff != "" {
 				t.Fatalf("unexpected fetched machinedata: %v", diff)
 			}
