@@ -34,6 +34,7 @@ import (
 
 	"github.com/ffromani/dra-driver-memory/pkg/alloc"
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
+	"github.com/ffromani/dra-driver-memory/pkg/hugepages"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 
@@ -58,15 +59,18 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName string
-	nodeName   string
-	logger     logr.Logger
-	kubeClient kubernetes.Interface
-	draPlugin  KubeletPlugin
-	nriPlugin  stub.Stub
-	cdiMgr     *cdi.Manager
-	allocMgr   *alloc.Manager
-	discoverer *sysinfo.Discoverer
+	driverName   string
+	nodeName     string
+	cgMount      string
+	logger       logr.Logger
+	kubeClient   kubernetes.Interface
+	draPlugin    KubeletPlugin
+	nriPlugin    stub.Stub
+	cdiMgr       *cdi.Manager
+	allocMgr     *alloc.Manager
+	discoverer   *sysinfo.Discoverer
+	hpRootLimits []hugepages.Limit
+	cgPathByPOD  map[string]string // podUID -> cgroupParent
 }
 
 type SysinfoVerifier interface {
@@ -84,24 +88,35 @@ type Environment struct {
 	Clientset   kubernetes.Interface
 	SysVerifier SysinfoVerifier
 	SysRoot     string
+	CgroupMount string
 }
 
 // Start creates and starts a new MemoryDriver.
 func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
-	if err := env.SysVerifier.Validate(); err != nil {
+	err := env.SysVerifier.Validate()
+	if err != nil {
 		return nil, err
 	}
-	plugin := &MemoryDriver{
-		driverName: env.DriverName,
-		nodeName:   env.NodeName,
-		kubeClient: env.Clientset,
-		logger:     env.Logger.WithName(env.DriverName),
-		allocMgr:   alloc.NewManager(),
-		discoverer: sysinfo.NewDiscoverer(env.SysRoot),
+
+	mdrv := &MemoryDriver{
+		driverName:  env.DriverName,
+		nodeName:    env.NodeName,
+		cgMount:     env.CgroupMount,
+		kubeClient:  env.Clientset,
+		logger:      env.Logger.WithName(env.DriverName),
+		allocMgr:    alloc.NewManager(),
+		discoverer:  sysinfo.NewDiscoverer(env.SysRoot),
+		cgPathByPOD: make(map[string]string),
+	}
+
+	err = mdrv.gatherHugepages(env.Logger)
+	if err != nil {
+		return nil, err
 	}
 
 	driverPluginPath := filepath.Join(kubeletPluginPath, env.DriverName)
-	if err := os.MkdirAll(driverPluginPath, 0750); err != nil {
+	err = os.MkdirAll(driverPluginPath, 0750)
+	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin path %s: %w", driverPluginPath, err)
 	}
 
@@ -110,11 +125,11 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		kubeletplugin.NodeName(env.NodeName),
 		kubeletplugin.KubeClient(env.Clientset),
 	}
-	draDrv, err := kubeletplugin.Start(ctx, plugin, kubeletOpts...)
+	draDrv, err := kubeletplugin.Start(ctx, mdrv, kubeletOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("start kubelet plugin: %w", err)
 	}
-	plugin.draPlugin = draDrv
+	mdrv.draPlugin = draDrv
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(context.Context) (bool, error) {
 		status := draDrv.RegistrationStatus()
 		if status == nil {
@@ -130,7 +145,7 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CDI manager: %w", err)
 	}
-	plugin.cdiMgr = cdiMgr
+	mdrv.cdiMgr = cdiMgr
 
 	// register the NRI plugin
 	nriOpts := []stub.Option{
@@ -142,15 +157,15 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 			klog.Infof("%s NRI plugin closed", env.DriverName)
 		}),
 	}
-	stub, err := stub.New(plugin, nriOpts...)
+	stub, err := stub.New(mdrv, nriOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin stub: %w", err)
 	}
-	plugin.nriPlugin = stub
+	mdrv.nriPlugin = stub
 
 	go func() {
 		for i := 0; i < maxAttempts; i++ {
-			err = plugin.nriPlugin.Run(ctx)
+			err = mdrv.nriPlugin.Run(ctx)
 			if err != nil {
 				klog.Infof("NRI plugin failed with error %v", err)
 			}
@@ -165,9 +180,9 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	}()
 
 	// publish available resources
-	go plugin.PublishResources(ctx)
+	go mdrv.PublishResources(ctx)
 
-	return plugin, nil
+	return mdrv, nil
 }
 
 func (mdrv *MemoryDriver) Stop() {
@@ -187,4 +202,24 @@ func (mdrv *MemoryDriver) logrFromContext(ctx context.Context) logr.Logger {
 		return mdrv.logger.WithName("nri")
 	}
 	return lh
+}
+
+func (mdrv *MemoryDriver) gatherHugepages(lh logr.Logger) error {
+	lh.V(2).Info("cgroups", "mountPath", mdrv.cgMount)
+	if mdrv.cgMount == "" {
+		return nil // nothing to do, can't fail
+	}
+	machineData, err := mdrv.discoverer.GetFreshMachineData(lh)
+	if err != nil {
+		return err
+	}
+	limits, err := hugepages.LimitsFromSystemPath(lh, machineData, mdrv.cgMount)
+	if err != nil {
+		return err
+	}
+	for _, limit := range limits {
+		lh.V(2).Info("hugepages root", "limit", limit.String())
+	}
+	mdrv.hpRootLimits = limits
+	return nil
 }

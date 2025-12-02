@@ -35,6 +35,7 @@ type Params struct {
 	BindAddress      string
 	ProcRoot         string
 	SysRoot          string
+	CgroupMount      string
 	DoInspection     bool
 	DoValidation     bool
 	DoManifests      bool
@@ -54,6 +55,7 @@ func (par *Params) InitFlags() {
 	flag.StringVar(&par.HostnameOverride, "hostname-override", par.HostnameOverride, "If non-empty, will be used as the name of the Node that kube-network-policies is running on. If unset, the node name is assumed to be the same as the node's hostname.")
 	flag.StringVar(&par.ProcRoot, "procfs-root", par.ProcRoot, "root point where procfs is mounted.")
 	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
+	flag.StringVar(&par.CgroupMount, "cgroup-mount", par.CgroupMount, "cgroupfs mount point. Set empty to DISABLE direct cgroup settings.")
 	flag.BoolVar(&par.DoInspection, "inspect", par.DoInspection, "inspect machine properties and exit.")
 	flag.BoolVar(&par.DoValidation, "validate", par.DoValidation, "validate machine properties and exit.")
 	flag.BoolVar(&par.DoManifests, "make-manifests", par.DoManifests, "emit DRA manifests based on hardware discovery.")

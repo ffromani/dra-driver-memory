@@ -117,11 +117,12 @@ func RunDaemon(ctx context.Context, params Params, drvLogger logr.Logger) error 
 	}
 
 	driverEnv := driver.Environment{
-		DriverName: driver.Name,
-		NodeName:   nodeName,
-		Clientset:  clientset,
-		Logger:     drvLogger,
-		SysRoot:    params.SysRoot,
+		DriverName:  driver.Name,
+		NodeName:    nodeName,
+		Clientset:   clientset,
+		Logger:      drvLogger,
+		SysRoot:     params.SysRoot,
+		CgroupMount: params.CgroupMount,
 		SysVerifier: SysinfoVerifierFunc(func() error {
 			return sysinfo.Validate(drvLogger, params.ProcRoot)
 		}),
