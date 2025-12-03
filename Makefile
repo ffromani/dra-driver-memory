@@ -64,7 +64,7 @@ clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
 test-unit-pkg: ## run tests for the main library code
-	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|internal|pkg/driver|test' )
+	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|internal|pkg/driver|test|tools' )
 
 test-unit: ## run tests for all the library code, including internal
 	go test -coverprofile=coverage.out ./pkg/... ./internal/... ./test/pkg/...
