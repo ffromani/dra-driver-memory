@@ -26,10 +26,191 @@ import (
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
+func TestSumLimits(t *testing.T) {
+	type testcase struct {
+		name     string
+		lla      []Limit
+		llb      []Limit
+		expected []Limit
+	}
+
+	testcases := []testcase{
+		{
+			name:     "all empty",
+			expected: nil,
+		},
+		{
+			name: "total overlap",
+			lla: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+			llb: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 1 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 1 * (1 << 30),
+					},
+				},
+			},
+			expected: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 5 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 3 * (1 << 30),
+					},
+				},
+			},
+		},
+		{
+			name: "partial overlap 2MB",
+			lla: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+			llb: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+			},
+			expected: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 8 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+		},
+		{
+			name: "partial overlap 1GB",
+			lla: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+			llb: []Limit{
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+			expected: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 30),
+					},
+				},
+			},
+		},
+		{
+			name: "no overlap",
+			lla: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+			},
+			llb: []Limit{
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+			expected: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			got := SumLimits(tcase.lla, tcase.llb)
+			if diff := cmp.Diff(got, tcase.expected); diff != "" {
+				t.Errorf("sum is different: %s", diff)
+			}
+		})
+	}
+}
+
 func TestLimitsFromAllocation(t *testing.T) {
 	machineDataX86 := sysinfo.MachineData{
 		Hugepagesizes: []uint64{
-			2 * (1 << 20),
+			(1 << 21),
 			(1 << 30),
 		},
 	}

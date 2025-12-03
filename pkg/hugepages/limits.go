@@ -19,6 +19,7 @@ package hugepages
 import (
 	"errors"
 	"io/fs"
+	"strings"
 
 	"github.com/go-logr/logr"
 
@@ -33,6 +34,38 @@ type LimitValue struct {
 	Unset bool   `json:"unset"`
 }
 
+func (lv LimitValue) Clone() LimitValue {
+	return LimitValue{
+		Value: lv.Value,
+		Unset: lv.Unset,
+	}
+}
+
+func (lv LimitValue) Add(x LimitValue) LimitValue {
+	if lv.Unset && x.Unset {
+		return LimitValue{
+			Value: 0,
+			Unset: true,
+		}
+	}
+	if lv.Unset && !x.Unset {
+		return LimitValue{
+			Value: x.Value,
+			Unset: false,
+		}
+	}
+	if !lv.Unset && x.Unset {
+		return LimitValue{
+			Value: lv.Value,
+			Unset: false,
+		}
+	}
+	return LimitValue{
+		Value: lv.Value + x.Value,
+		Unset: false,
+	}
+}
+
 // Limit is a Plain-Old-Data struct we carry around to do our computations;
 // this way we can set `runtimeapi.HugepageLimit` once and avoid copies.
 type Limit struct {
@@ -44,11 +77,65 @@ type Limit struct {
 	Limit LimitValue `json:"limit"`
 }
 
+func (lim Limit) Clone() Limit {
+	return Limit{
+		PageSize: lim.PageSize,
+		Limit:    lim.Limit.Clone(),
+	}
+}
+
 func (lim Limit) String() string {
 	if lim.Limit.Unset {
 		return lim.PageSize + "=max"
 	}
 	return lim.PageSize + "=" + unitconv.SizeInBytesToCGroupString(lim.Limit.Value)
+}
+
+// SumLimits add limits "llb" to the existing "lla".
+// Note we expect to have <= 4 limits, so the simplest nested for should be perfectly fine.
+func SumLimits(lla, llb []Limit) []Limit {
+	var ret []Limit
+	for idxa := range lla {
+		found := false
+		for idxb := range llb {
+			if lla[idxa].PageSize == llb[idxb].PageSize {
+				found = true
+				ret = append(ret, Limit{
+					PageSize: lla[idxa].PageSize,
+					Limit:    lla[idxa].Limit.Add(llb[idxb].Limit),
+				})
+				break
+			}
+		}
+		if !found {
+			ret = append(ret, lla[idxa].Clone())
+		}
+	}
+	for idxb := range llb {
+		found := false
+		for idxa := range lla {
+			if llb[idxb].PageSize == lla[idxa].PageSize {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ret = append(ret, llb[idxb].Clone())
+		}
+	}
+	return ret
+}
+
+func LimitsToString(lls []Limit) string {
+	if len(lls) == 0 {
+		return ""
+	}
+	sep := ", "
+	var sb strings.Builder
+	for _, lim := range lls {
+		sb.WriteString(sep + lim.String())
+	}
+	return strings.TrimPrefix(sb.String(), sep)
 }
 
 func LimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []Limit {
@@ -102,7 +189,7 @@ func LimitsFromSystemPath(lh logr.Logger, machineData sysinfo.MachineData, cgPat
 		val, err := cgroups.ParseValue(lh, cgPath, fileName)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				val = 0
+				val = -1
 			} else {
 				lh.V(2).Error(err, "parsing limit", "path", cgPath, "file", fileName)
 				continue
@@ -123,14 +210,34 @@ func LimitsFromSystemPath(lh logr.Logger, machineData sysinfo.MachineData, cgPat
 }
 
 func SetSystemLimits(lh logr.Logger, cgPath string, limits []Limit) error {
+	/* doortrap: HugeTLB Cgroup v2 Limits
+	 * When setting hugepage limits in Cgroup v2, we MUST set two distinct values.
+	 * Failing to set the reservation limit is will cause amibguous ENOMEM failures.
+	 *
+	 * 1. Usage Limit (hugetlb.<size>.max):
+	 * - Controls: The actual physical RAM currently consumed (faulted in).
+	 * - Enforced: When the app writes to memory.
+	 *
+	 * 2. Reservation Limit (hugetlb.<size>.rsvd.max):
+	 * - Controls: The "promise" of pages that the kernel guarantees will be available.
+	 * - Enforced: When the app calls mmap(MAP_HUGETLB).
+	 *
+	 * When an application calls mmap(), it hasn't used memory yet (Usage=0), but it demands
+	 * a guarantee (Reservation). If 'rsvd.max' is 0 (default) but 'max' is > 0, the kernel
+	 * allows 0 bytes of reservation. The mmap() call fails immediately with ENOMEM, despite
+	 * the visible usage limit looking correct.
+	 * So: always sync 'rsvd.max' to at least the value of 'max'.
+	 */
+	attrs := []string{".rsvd.max", ".max"}
 	for _, limit := range limits {
-		// all the kernel interfaces use a different naming :\
-		fileName := "hugetlb." + limit.PageSize + ".max"
 		value := convertLimitValue(limit.Limit)
-		lh.V(2).Info("setting limit", "cgPath", cgPath, "file", fileName, "value", value)
-		err := cgroups.WriteValue(lh, cgPath, fileName, value)
-		if err != nil {
-			return err
+		for _, attr := range attrs {
+			fileName := "hugetlb." + limit.PageSize + attr
+			lh.V(2).Info("setting limit", "cgPath", cgPath, "file", fileName, "value", value)
+			err := cgroups.WriteValue(lh, cgPath, fileName, value)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

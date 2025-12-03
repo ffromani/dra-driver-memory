@@ -21,6 +21,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -39,21 +41,21 @@ import (
 func main() {
 	var useHugeTLB bool = true
 	var runForever bool
-	var singleNUMA bool
 	var shouldFail bool
+	var singleNUMA bool
+	var anyNUMA bool
 	var procRoot string = "/"
 	var sysRoot string = "/"
-	var numaNodes cpuset.CPUSet = cpuset.New(0)
+	var numaNodes cpuset.CPUSet
 	var allocSize uint64 = uint64(8 * (1 << 20)) // bytes
 
 	flag.BoolVar(&runForever, "run-forever", runForever, "Run forever after the operation is completed.")
 	flag.BoolVar(&useHugeTLB, "use-hugetlb", useHugeTLB, "Use HugeTLB for allocation.")
-	flag.BoolVar(&singleNUMA, "single-numa", singleNUMA, "Check the allocations all come from a single NUMA node, whatever it is.")
 	flag.BoolVar(&shouldFail, "should-fail", shouldFail, "Expect failure, not success.")
 	flag.StringVar(&procRoot, "proc-root", procRoot, "procfs root path.")
 	flag.StringVar(&sysRoot, "sys-root", sysRoot, "sysfs root path.")
-	flag.Var(&CPUSetValue{CPUs: &numaNodes}, "numa-nodes", "Expected NUMA Nodes to allocate memory from.")
 	flag.Var(&UnitValue{SizeInBytes: &allocSize}, "alloc-size", "Amount of memory to allocate.")
+	flag.Var(&NUMAValue{Nodes: &numaNodes, Single: &singleNUMA, Any: &anyNUMA}, "numa-align", "NUMA alignment required.")
 	flag.Parse()
 
 	var lh logr.Logger = stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
@@ -83,29 +85,33 @@ func main() {
 
 	if err != nil {
 		if shouldFail && err == unix.ENOMEM { // TODO: is equality check the best option here?
-			mgr.Success("Allocation failed as expected with 'ENOMEM' (Out of memory)")
+			mgr.Complete(0, result.FailedAsExpected, "Allocation failed as expected with 'ENOMEM' (Out of memory)")
 		}
 		// Any other error is a different problem
-		mgr.Failure(1, result.UnexpectedMMapError, "mmap error: %v", err)
+		mgr.Complete(1, result.UnexpectedMMapError, "mmap error: %v", err)
 	}
 
-	checkAllocatedMemory(data)
+	checkAllocatedMemory(lh, data)
 
 	memNodes, err := memalign.NUMANodesByPID(lh, memalign.PIDSelf, procRoot)
 	if err != nil {
-		mgr.Failure(2, result.CannotCheckAllocation, "cannot check allocation: %v", err)
+		mgr.Complete(2, result.CannotCheckAllocation, "cannot check allocation: %v", err)
 	}
 
-	// note no explicit cleanup: we are exiting anyway
-	switch {
-	case singleNUMA && memNodes.Size() != 1:
-		mgr.Failure(4, result.NUMAOverflown, "NUMA nodes allocation don't come from a single NUMA node: %v", memNodes.String())
-	case !numaNodes.Equals(memNodes):
-		mgr.Failure(4, result.NUMAMismatch, "NUMA nodes allocation mismatch expected=%v actual=%v", numaNodes.String(), memNodes.String())
-	default:
-		// happy path, all good
-		mgr.Success("completed")
+	if singleNUMA {
+		if memNodes.Size() != 1 {
+			mgr.Complete(4, result.NUMAOverflown, "NUMA nodes allocation don't come from a single NUMA node actual=%q", memNodes.String())
+		}
+		mgr.Complete(0, result.Succeeded, "completed")
 	}
+	if anyNUMA {
+		mgr.Complete(0, result.Succeeded, "completed")
+	}
+	if !numaNodes.Equals(memNodes) {
+		mgr.Complete(4, result.NUMAMismatch, "NUMA nodes allocation mismatch expected=%q actual=%q", numaNodes.String(), memNodes.String())
+	}
+
+	mgr.Complete(0, result.Succeeded, "completed")
 }
 
 type Manager struct {
@@ -128,18 +134,10 @@ func NewManagerWaiting(res *result.Result) *Manager {
 	return mgr
 }
 
-func (pl *Manager) Success(fmt_ string, args ...any) {
+func (pl *Manager) Complete(code int, reason result.Reason, fmt_ string, args ...any) {
 	if pl.signalCh != nil {
 		fmt_ = "waiting for a signal to quit; " + fmt_
 	}
-	pl.res.Finalize(0, result.Succeeded, fmt_, args...)
-	if pl.signalCh != nil {
-		<-pl.signalCh
-	}
-	os.Exit(0)
-}
-
-func (pl *Manager) Failure(code int, reason result.Reason, fmt_ string, args ...any) {
 	pl.res.Finalize(code, reason, fmt_, args...)
 	if pl.signalCh != nil {
 		<-pl.signalCh
@@ -147,32 +145,52 @@ func (pl *Manager) Failure(code int, reason result.Reason, fmt_ string, args ...
 	os.Exit(code)
 }
 
-func checkAllocatedMemory(data []byte) {
+func checkAllocatedMemory(lh logr.Logger, data []byte) {
 	// write memory to ensure the kernel actually allocates to us
 	// this can trigger an abort (SIGBUS/SIGSEGV) in the worst case,
 	// and we can't recover
+	ts := time.Now()
 	for i := range data {
 		data[i] = 42
 	}
+	elapsed := time.Since(ts)
+	lh.Info("allocation memory check done", "elapsed", elapsed)
 }
 
-type CPUSetValue struct {
-	CPUs *cpuset.CPUSet
+type NUMAValue struct {
+	Nodes  *cpuset.CPUSet
+	Single *bool
+	Any    *bool
 }
 
-func (v CPUSetValue) String() string {
-	if v.CPUs == nil {
-		return ""
+func (v NUMAValue) String() string {
+	if v.Single != nil && *v.Single {
+		return "single"
 	}
-	return v.CPUs.String()
+	if v.Any != nil && *v.Any {
+		return "any"
+	}
+	if v.Nodes != nil {
+		return v.Nodes.String()
+	}
+	return ""
 }
 
-func (v CPUSetValue) Set(s string) error {
-	cpus, err := cpuset.Parse(s)
+func (v NUMAValue) Set(s string) error {
+	s = strings.ToLower(s)
+	if s == "single" {
+		*v.Single = true
+		return nil
+	}
+	if s == "any" {
+		*v.Any = true
+		return nil
+	}
+	nodes, err := cpuset.Parse(s)
 	if err != nil {
 		return err
 	}
-	*v.CPUs = cpus
+	*v.Nodes = nodes
 	return nil
 }
 

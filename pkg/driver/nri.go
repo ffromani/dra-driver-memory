@@ -29,6 +29,7 @@ import (
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
 	"github.com/ffromani/dra-driver-memory/pkg/hugepages"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
@@ -50,15 +51,6 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	lh = lh.WithName("CreateContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
-
-	cgroupParent, ok := mdrv.cgPathByPOD[pod.Uid]
-	if ok {
-		// TODO: this was initially introduced out of caution to handle pod sandbox creation race, which
-		// are however unlikely (or impossible?). Deferring the pod-level setting at container level would
-		// however allowing us to set more precise pod-level limits. This is something we can explore in the future.
-		lh.V(2).Info("setting deferred pod cgroup limit", "podUID", pod.Uid, "cgroupParent", cgroupParent)
-		_ = mdrv.setPodLimits(lh, cgroupParent)
-	}
 
 	adjust := &api.ContainerAdjustment{}
 	var updates []*api.ContainerUpdate
@@ -86,15 +78,20 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 		mdrv.allocMgr.BindClaimToPod(lh, pod.Id, claimUID)
 	}
 
+	machineData := mdrv.discoverer.GetCachedMachineData()
+	hpLimits := hugepages.LimitsFromAllocations(lh, machineData, allocs)
+	cgroupParent := mdrv.cgPathByPOD[pod.Uid]
+	if cgroupParent != "" {
+		lh.V(2).Info("setting deferred pod cgroup limit", "podUID", pod.Uid, "cgroupParent", cgroupParent)
+		_ = mdrv.updatePodLimits(lh, machineData, cgroupParent, hpLimits)
+	}
+
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
-	for _, hpLimit := range hugepages.LimitsFromAllocations(lh, mdrv.discoverer.GetCachedMachineData(), allocs) {
+	for _, hpLimit := range hpLimits {
 		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit.Value) // MUST be set
 	}
 
-	lh.V(2).Info("memory pinning", "memoryNodes", numaNodes.String())
-	for _, hp := range adjust.GetLinux().GetResources().GetHugepageLimits() {
-		lh.V(2).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
-	}
+	logAdjust(lh, adjust)
 
 	return adjust, updates, nil
 }
@@ -106,7 +103,6 @@ func (mdrv *MemoryDriver) UpdatePodSandbox(ctx context.Context, pod *api.PodSand
 	defer lh.V(4).Info("done")
 
 	lh.V(2).Info("updates", "overhead", toJSON(over), "resources", toJSON(res))
-
 	return nil
 }
 
@@ -145,11 +141,8 @@ func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	err := mdrv.setPodLimits(lh, pod.Linux.CgroupParent)
-	if err != nil {
-		mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
-		lh.V(2).Info("deferring pod limits settings", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
-	}
+	mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
+	lh.V(2).Info("deferring pod limits settings", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
 	return nil
 }
 
@@ -173,12 +166,26 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	return nil
 }
 
-func (mdrv *MemoryDriver) setPodLimits(lh logr.Logger, cgroupParent string) error {
+func (mdrv *MemoryDriver) updatePodLimits(lh logr.Logger, machineData sysinfo.MachineData, cgroupParent string, limits []hugepages.Limit) error {
 	if mdrv.cgMount == "" {
 		return nil // nothing to do
 	}
 	cgPath := filepath.Join(mdrv.cgMount, cgroupParent)
-	err := hugepages.SetSystemLimits(lh, cgPath, mdrv.hpRootLimits)
+
+	curLimits, err := hugepages.LimitsFromSystemPath(lh, machineData, cgroupParent)
+	if err != nil {
+		lh.V(2).Error(err, "failed to get the current pod cgroup limits", "root", mdrv.cgMount, "path", cgroupParent)
+		return err
+	}
+
+	newLimits := hugepages.SumLimits(curLimits, limits)
+	lh.V(4).Info("pod limits",
+		"previous", hugepages.LimitsToString(curLimits),
+		"current", hugepages.LimitsToString(limits),
+		"enforcing", hugepages.LimitsToString(newLimits),
+	)
+
+	err = hugepages.SetSystemLimits(lh, cgPath, newLimits)
 	if err != nil {
 		lh.V(2).Error(err, "failed to set pod cgroup limits", "root", mdrv.cgMount, "path", cgroupParent)
 		return err
@@ -192,4 +199,11 @@ func toJSON(v any) string {
 		return fmt.Sprintf("<JSON marshal error: %v>", err)
 	}
 	return string(data)
+}
+
+func logAdjust(lh logr.Logger, adjust *api.ContainerAdjustment) {
+	lh.V(2).Info("memory pinning", "memoryNodes", adjust.GetLinux().GetResources().GetCpu().GetMems())
+	for _, hp := range adjust.GetLinux().GetResources().GetHugepageLimits() {
+		lh.V(2).Info("hugepage limits", "hugepageSize", hp.PageSize, "limit", hp.Limit)
+	}
 }

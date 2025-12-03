@@ -1,0 +1,35 @@
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: hugepages-2m
+spec:
+  spec:
+    devices:
+      requests:
+      - name: hp2m
+        exactly:
+          deviceClassName: dra.hugepages-2m
+          capacity:
+            requests:
+              size: 256Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: dramemtester-
+spec:
+  containers:
+  - name: dramemtester
+    image: quay.io/fromani/dramemtester:v0.0.20251203
+    imagePullPolicy: Always
+    command: ["/bin/dramemtester", "-run-forever", "-numa-align=any", "-use-hugetlb=true", "-alloc-size=128m"]
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      claims:
+      - name: hp2m
+  resourceClaims:
+  - name: hp2m
+    resourceClaimTemplateName: hugepages-2m
