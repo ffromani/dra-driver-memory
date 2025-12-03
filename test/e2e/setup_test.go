@@ -32,17 +32,11 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/node"
 )
 
-var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("setup"), func() {
+var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("setup", "hugepages:2M", "hugepages:1G"), func() {
 	var rootFxt *fixture.Fixture
 	var targetNode *v1.Node
-	var dramemoryTesterImage string
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
-		// early cheap check before to create the Fixture, so we use GinkgoLogr directly
-		dramemoryTesterImage = os.Getenv("DRAMEM_E2E_TEST_IMAGE")
-		gomega.Expect(dramemoryTesterImage).ToNot(gomega.BeEmpty(), "missing environment variable DRAMEM_E2E_TEST_IMAGE")
-		ginkgo.GinkgoLogr.Info("discovery image", "pullSpec", dramemoryTesterImage)
-
 		var err error
 
 		rootFxt, err = fixture.ForGinkgo()

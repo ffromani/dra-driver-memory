@@ -40,7 +40,6 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 	var dramemoryTesterImage string
 
 	ginkgo.BeforeAll(func(ctx context.Context) {
-		// early cheap check before to create the Fixture, so we use GinkgoLogr directly
 		dramemoryTesterImage = os.Getenv("DRAMEM_E2E_TEST_IMAGE")
 		gomega.Expect(dramemoryTesterImage).ToNot(gomega.BeEmpty(), "missing environment variable DRAMEM_E2E_TEST_IMAGE")
 		ginkgo.GinkgoLogr.Info("discovery image", "pullSpec", dramemoryTesterImage)
@@ -77,12 +76,12 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			gomega.Expect(fxt.Teardown(ctx)).To(gomega.Succeed())
 		})
 
-		ginkgo.It("should run a pod with a single resourceclaimtemplate", func(ctx context.Context) {
+		ginkgo.It("should run successfully a pod which allocates within the limits", func(ctx context.Context) {
 			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "memory-256m",
+					Name:      "memory-512m",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -94,7 +93,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 										DeviceClassName: "dra.memory",
 										Capacity: &resourcev1.CapacityRequirements{
 											Requests: map[resourcev1.QualifiedName]resource.Quantity{
-												resourcev1.QualifiedName("size"): *resource.NewQuantity(256*(1<<20), resource.BinarySI),
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(512*(1<<20), resource.BinarySI),
 											},
 										},
 									},
@@ -137,7 +136,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-256m"),
+							ResourceClaimTemplateName: ptr.To("memory-512m"),
 						},
 					},
 				},
