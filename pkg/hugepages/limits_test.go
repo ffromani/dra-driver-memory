@@ -26,6 +26,80 @@ import (
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
+func TestAddLimitValue(t *testing.T) {
+	type testcase struct {
+		name     string
+		ref      LimitValue
+		op       LimitValue
+		expected LimitValue
+	}
+
+	testcases := []testcase{
+		{
+			name: "zero value",
+		},
+		{
+			name: "unset adding unset",
+			ref: LimitValue{
+				Unset: true,
+			},
+			op: LimitValue{
+				Unset: true,
+			},
+			expected: LimitValue{
+				Unset: true,
+			},
+		},
+		{
+			name: "unset adding set",
+			ref: LimitValue{
+				Unset: true,
+				Value: 8, // impossible, but to prove the point
+			},
+			op: LimitValue{
+				Value: 32,
+			},
+			expected: LimitValue{
+				Value: 32,
+			},
+		},
+		{
+			name: "set adding unset",
+			ref: LimitValue{
+				Value: 48,
+			},
+			op: LimitValue{
+				Unset: true,
+				Value: 32, // impossible, but to prove the point
+			},
+			expected: LimitValue{
+				Value: 48,
+			},
+		},
+		{
+			name: "set adding set",
+			ref: LimitValue{
+				Value: 48,
+			},
+			op: LimitValue{
+				Value: 32,
+			},
+			expected: LimitValue{
+				Value: 80,
+			},
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			got := tcase.ref.Add(tcase.op)
+			if diff := cmp.Diff(got, tcase.expected); diff != "" {
+				t.Errorf("unexpected diff=%v", diff)
+			}
+		})
+	}
+}
+
 func TestSumLimits(t *testing.T) {
 	type testcase struct {
 		name     string
@@ -202,6 +276,121 @@ func TestSumLimits(t *testing.T) {
 			got := SumLimits(tcase.lla, tcase.llb)
 			if diff := cmp.Diff(got, tcase.expected); diff != "" {
 				t.Errorf("sum is different: %s", diff)
+			}
+		})
+	}
+}
+
+func TestLimitString(t *testing.T) {
+	type testcase struct {
+		name     string
+		limit    Limit
+		expected string
+	}
+
+	testcases := []testcase{
+		{
+			name:     "zero value",
+			limit:    Limit{},
+			expected: "",
+		},
+		{
+			name: "value set",
+			limit: Limit{
+				PageSize: "4k",
+				Limit: LimitValue{
+					Value: 8 * (1 << 20),
+				},
+			},
+			expected: "4k=8MB",
+		},
+		{
+			name: "zero value set",
+			limit: Limit{
+				PageSize: "2m",
+				Limit: LimitValue{
+					Value: 0,
+				},
+			},
+			expected: "2m=0KB",
+		},
+		{
+			name: "unset",
+			limit: Limit{
+				PageSize: "2m",
+				Limit: LimitValue{
+					Unset: true,
+				},
+			},
+			expected: "2m=max",
+		},
+		{
+			name: "unset conflict",
+			limit: Limit{
+				PageSize: "2m",
+				Limit: LimitValue{
+					Unset: true,
+					Value: 16 * (2 << 20),
+				},
+			},
+			expected: "2m=max",
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			got := tcase.limit.String()
+			if got != tcase.expected {
+				t.Errorf("got=%q expected=%q", got, tcase.expected)
+			}
+		})
+	}
+}
+
+func TestLimitsToString(t *testing.T) {
+	type testcase struct {
+		name     string
+		limits   []Limit
+		expected string
+	}
+
+	testcases := []testcase{
+		{
+			name:     "zero value",
+			limits:   []Limit{},
+			expected: "",
+		},
+		{
+			name: "single limit - unset",
+			limits: []Limit{
+				{
+					PageSize: "4k",
+					Limit: LimitValue{
+						Unset: true,
+					},
+				},
+			},
+			expected: "4k=max",
+		},
+		{
+			name: "single limit - set",
+			limits: []Limit{
+				{
+					PageSize: "4k",
+					Limit: LimitValue{
+						Value: 8 * (2 << 20),
+					},
+				},
+			},
+			expected: "4k=16MB",
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			got := LimitsToString(tcase.limits)
+			if diff := cmp.Diff(got, tcase.expected); diff != "" {
+				t.Errorf("unexpected diff: %v", diff)
 			}
 		})
 	}

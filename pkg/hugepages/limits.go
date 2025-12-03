@@ -85,6 +85,9 @@ func (lim Limit) Clone() Limit {
 }
 
 func (lim Limit) String() string {
+	if lim.PageSize == "" {
+		return ""
+	}
 	if lim.Limit.Unset {
 		return lim.PageSize + "=max"
 	}
