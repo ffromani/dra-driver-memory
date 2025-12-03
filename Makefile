@@ -54,6 +54,9 @@ build-setuphelpers: build-setup-containerd ## build the configuration setup help
 build-setup-containerd: ## build the containerd configuration setup helper
 	go build -v -o "$(OUT_DIR)/setup-containerd" ./config/containerd
 
+build-test-dramemtester: ## build helper to serve as entry point and report memory allocation
+	go build -v -o "$(OUT_DIR)/dramemtester" ./test/image/dramemtester
+
 clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
@@ -61,18 +64,18 @@ test-unit-pkg: ## run tests for the main library code
 	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|internal|pkg/driver|test' )
 
 test-unit: ## run tests for all the library code, including internal
-	go test -coverprofile=coverage.out ./pkg/... ./internal/...
+	go test -coverprofile=coverage.out ./pkg/... ./internal/... ./test/pkg/...
 
 test-e2e-base: ## run core E2E tests
-	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='tier0'
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='tier0'
 
-test-e2e-kind: ## run core E2E tests suitable to run on a kind cluster
+test-e2e-kind-mem: ## run core E2E tests suitable to run on a kind cluster pertaining memory allocation
 	# TODO: add tier filtering
-	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind'
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && memory'
 
-test-e2e-kind-hp: ## run core E2E tests suitable to run on a kind cluster with hugepages provisioned
+test-e2e-kind-hp: ## run core E2E tests suitable to run on a kind cluster pertaining hugepages allocation
 	# TODO: add tier filtering
-	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_CI) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:2M'
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:2M'
 
 update: ## runs go mod tidy
 	go mod tidy
@@ -83,6 +86,10 @@ $(OUT_DIR):  ## creates the output directory (used internally)
 .PHONY: vet
 vet:  ## vet the source code tree
 	go vet ./pkg/... ./internal/... ./cmd/...
+
+lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
+	$(GOLANGCI_LINT) run ./...
+	$(SHELLCHECK) ./config/setup.sh
 
 # get image name from directory we're building
 CLUSTER_NAME=dra-driver-memory
@@ -117,6 +124,13 @@ build-image: ## build image
 		--tag="${IMAGE_CI}" \
 		--load
 
+build-test-image: ## build tests image
+	${CONTAINER_ENGINE} build . \
+		--file test/image/Dockerfile \
+		--platform="${PLATFORMS}" \
+		--tag="${IMAGE_TEST}" \
+		--load
+
 # no need to push the test image
 # never push the CI image! it intentionally refers to a non-existing registry
 push-image: build-image ## build and push image
@@ -128,20 +142,16 @@ kind-cluster:  ## create kind cluster
 kind-load-image: build-image  ## load the current container image into kind
 	kind load docker-image ${IMAGE} --name ${CLUSTER_NAME}
 
-ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
+ci-kind-setup: ci-manifests build-image build-test-image ## setup a CI cluster from scratch
 	kind create cluster --name ${CLUSTER_NAME} --config hack/ci/kind-ci.yaml
 	kubectl label node ${CLUSTER_NAME}-worker node-role.kubernetes.io/worker=''
-	kind load docker-image --name ${CLUSTER_NAME} ${IMAGE_CI}
+	kind load docker-image --name ${CLUSTER_NAME} ${IMAGE_CI} ${IMAGE_TEST}
 	hack/ci/wait-worker-nodes.sh
 	kubectl create -f hack/ci/install-ci.yaml
 	hack/ci/wait-resourcelices.sh
 
 ci-kind-teardown:  ## teardown a CI cluster
 	kind delete cluster --name ${CLUSTER_NAME}
-
-lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
-	$(GOLANGCI_LINT) run ./...
-	$(SHELLCHECK) ./config/setup.sh
 
 $(GOLANGCI_LINT): dep-install-golangci-lint
 $(SHELLCHECK): dep-insatall-shellcheck

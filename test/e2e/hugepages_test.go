@@ -86,7 +86,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			gomega.Expect(fxt.Teardown(ctx)).To(gomega.Succeed())
 		})
 
-		ginkgo.It("should run a pod with a single resourceclaimtemplate", func(ctx context.Context) {
+		ginkgo.It("should run successfully a pod which allocates within the limits", ginkgo.Label("positive"), func(ctx context.Context) {
 			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{

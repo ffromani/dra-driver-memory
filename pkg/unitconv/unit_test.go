@@ -33,6 +33,10 @@ func TestSizeToStringRoundTrip(t *testing.T) {
 	testcases := []testcase{
 		// good cases, add them at the bottom of the section
 		{
+			sval: "7b",
+			uval: 7,
+		},
+		{
 			sval: "4k",
 			uval: 4 * 1024,
 		},
@@ -63,10 +67,6 @@ func TestSizeToStringRoundTrip(t *testing.T) {
 		},
 		{
 			sval: "Kk",
-			fail: true,
-		},
-		{
-			sval: "8b",
 			fail: true,
 		},
 		{

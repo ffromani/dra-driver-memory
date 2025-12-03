@@ -17,6 +17,9 @@
 package hugepages
 
 import (
+	"errors"
+	"io/fs"
+
 	"github.com/go-logr/logr"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cgroups"
@@ -98,8 +101,12 @@ func LimitsFromSystemPath(lh logr.Logger, machineData sysinfo.MachineData, cgPat
 		fileName := "hugetlb." + pageSize + ".max"
 		val, err := cgroups.ParseValue(lh, cgPath, fileName)
 		if err != nil {
-			lh.V(2).Error(err, "parsing limit", "path", cgPath, "file", fileName)
-			continue
+			if errors.Is(err, fs.ErrNotExist) {
+				val = 0
+			} else {
+				lh.V(2).Error(err, "parsing limit", "path", cgPath, "file", fileName)
+				continue
+			}
 		}
 		lh.V(2).Info("reading limit", "file", fileName, "value", val)
 		lim := Limit{
