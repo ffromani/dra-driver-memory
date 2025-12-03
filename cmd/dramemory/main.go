@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -45,7 +46,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	if params.DoInspection {
+	if params.DoVersion {
+		ver, ok := command.GetVersion()
+		if !ok {
+			logger.Info("cannot get version")
+			os.Exit(1)
+		}
+		fmt.Println(ver.Build + " " + ver.Golang)
+		os.Exit(0)
+	}
+
+	if params.InspectMode != command.InspectNone {
 		if err := command.Inspect(params, logger); err != nil {
 			logger.Error(err, "inspection failed")
 			os.Exit(1)

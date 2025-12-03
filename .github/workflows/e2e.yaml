@@ -42,7 +42,7 @@ jobs:
     - name: Provision 2M hugepages
       run: sudo ./bin/dramemory -hugepages-provision ./hack/ci/hugepages-2M.yaml
     - name: Hugepages provision feedback check
-      run: ./bin/dramemory -inspect
+      run: ./bin/dramemory -inspect summary
     - name: Kind version check
       run: kind version
     - name: Create and setup K8S kind cluster

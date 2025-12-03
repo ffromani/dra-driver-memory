@@ -25,6 +25,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	ProgramName = "dramemory"
+)
+
 type HugePagesParams struct {
 	RuntimeProvisionConfig string
 }
@@ -36,9 +40,10 @@ type Params struct {
 	ProcRoot         string
 	SysRoot          string
 	CgroupMount      string
-	DoInspection     bool
 	DoValidation     bool
 	DoManifests      bool
+	DoVersion        bool
+	InspectMode      InspectMode
 	HugePages        HugePagesParams
 }
 
@@ -56,10 +61,11 @@ func (par *Params) InitFlags() {
 	flag.StringVar(&par.ProcRoot, "procfs-root", par.ProcRoot, "root point where procfs is mounted.")
 	flag.StringVar(&par.SysRoot, "sysfs-root", par.SysRoot, "root point where sysfs is mounted.")
 	flag.StringVar(&par.CgroupMount, "cgroup-mount", par.CgroupMount, "cgroupfs mount point. Set empty to DISABLE direct cgroup settings.")
-	flag.BoolVar(&par.DoInspection, "inspect", par.DoInspection, "inspect machine properties and exit.")
 	flag.BoolVar(&par.DoValidation, "validate", par.DoValidation, "validate machine properties and exit.")
 	flag.BoolVar(&par.DoManifests, "make-manifests", par.DoManifests, "emit DRA manifests based on hardware discovery.")
+	flag.BoolVar(&par.DoVersion, "version", par.DoVersion, "print program version and exit.")
 	flag.StringVar(&par.HugePages.RuntimeProvisionConfig, "hugepages-provision", par.HugePages.RuntimeProvisionConfig, "provision hugepages at runtime (now) using the config at path (`-` for stdin).")
+	flag.Var(&InspectValue{Mode: &par.InspectMode}, "inspect", "inspect machine properties and exit.")
 }
 
 func (par *Params) ParseFlags() {
@@ -73,16 +79,32 @@ func (par *Params) DumpFlags(lh logr.Logger) {
 	})
 }
 
-func printVersion(lh logr.Logger) {
+type Version struct {
+	Golang string
+	Build  string
+}
+
+func GetVersion() (Version, bool) {
 	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return Version{}, false
+	}
+	ver := Version{
+		Golang: info.GoVersion,
+	}
+	for _, f := range info.Settings {
+		if f.Key == "vcs.revision" {
+			ver.Build = f.Value
+			return ver, true
+		}
+	}
+	return ver, false
+}
+
+func printVersion(lh logr.Logger) {
+	ver, ok := GetVersion()
 	if !ok {
 		return
 	}
-	var vcsRevision string
-	for _, f := range info.Settings {
-		if f.Key == "vcs.revision" {
-			vcsRevision = f.Value
-		}
-	}
-	lh.Info("dramemory", "golang", info.GoVersion, "build", vcsRevision)
+	lh.Info(ProgramName, "golang", ver.Golang, "build", ver.Build)
 }
