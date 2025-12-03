@@ -18,6 +18,7 @@ package cdi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,7 +114,7 @@ func (mgr *Manager) RemoveDevice(lh logr.Logger, deviceName string) error {
 
 	spec, err := mgr.readSpecFromFile(lh)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil // File already gone, nothing to do.
 		}
 		return err

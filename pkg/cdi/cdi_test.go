@@ -243,6 +243,26 @@ func TestRemoveDeviceNotFound(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRemoveDeviceFileGone(t *testing.T) {
+	saveCDIDir := SpecDir
+	t.Cleanup(func() {
+		SpecDir = saveCDIDir
+	})
+	SpecDir = t.TempDir()
+	logger := testr.New(t)
+
+	mgr, err := NewManager(testDriverName, logger)
+	require.NoError(t, err)
+
+	// Delete the spec file to simulate it being removed externally
+	err = os.Remove(filepath.Join(SpecDir, testDriverName+".json"))
+	require.NoError(t, err)
+
+	// RemoveDevice should handle missing file gracefully and return nil
+	err = mgr.RemoveDevice(logger, "anydevice")
+	require.NoError(t, err, "RemoveDevice should return nil when spec file is gone")
+}
+
 func TestNewManagerExistingSpec(t *testing.T) {
 	saveCDIDir := SpecDir
 	t.Cleanup(func() {
