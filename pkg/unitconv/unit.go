@@ -42,6 +42,9 @@ const (
 )
 
 func NarrowSize(size uint64) (uint64, string) {
+	if size == 0 { // corner case
+		return 0, "B"
+	}
 	if size%EiB == 0 {
 		return size / EiB, "EiB"
 	}
@@ -81,12 +84,13 @@ func MinimizedStringToSizeInBytes(sz string) (uint64, error) {
 	}
 	// NOTE: need to be a lowercase RFC 1123 label
 	mults := map[byte]uint64{
-		byte('k'): 1024,
-		byte('m'): 1024 * 1024,
-		byte('g'): 1024 * 1024 * 1024,
-		byte('t'): 1024 * 1024 * 1024 * 1024,
-		byte('p'): 1024 * 1024 * 1024 * 1024 * 1024,
-		byte('e'): 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+		byte('b'): 1 << 0,
+		byte('k'): 1 << 10,
+		byte('m'): 1 << 20,
+		byte('g'): 1 << 30,
+		byte('t'): 1 << 40,
+		byte('p'): 1 << 50,
+		byte('e'): 1 << 60,
 	}
 	unit := sz[len(sz)-1]
 	rval := sz[:len(sz)-1]
