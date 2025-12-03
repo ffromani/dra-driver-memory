@@ -17,10 +17,16 @@ limitations under the License.
 package e2e
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/gcustom"
+	"github.com/onsi/gomega/types"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestE2E(t *testing.T) {
@@ -44,3 +50,43 @@ Note that using "Ordered" may introduce subtle bugs caused by incorrect tests wh
 state. We should keep looking for ways to eventually remove "Ordered".
 Please note "Serial" is however unavoidable because we manage the shared node state.
 */
+
+// add custom matchers and generic test helpers which we didn't promote yet into `test/pkg` here
+
+const (
+	reasonOOMKilled = "OOMKilled"
+)
+
+func BeOOMKilled(lh_ logr.Logger) types.GomegaMatcher {
+	return gcustom.MakeMatcher(func(actual *corev1.Pod) (bool, error) {
+		lh := lh_.WithValues("podUID", actual.UID, "namespace", actual.Namespace, "name", actual.Name)
+		if actual == nil {
+			return false, errors.New("nil Pod")
+		}
+		if actual.Status.Phase != corev1.PodFailed {
+			lh.Info("unexpected phase", "phase", actual.Status.Phase)
+			return false, nil
+		}
+		cntSt := findTerminatedContainerStatus(actual.Status.ContainerStatuses)
+		if cntSt == nil {
+			lh.Info("no container in terminated state")
+			return false, nil
+		}
+		if cntSt.State.Terminated.Reason != reasonOOMKilled {
+			lh.Info("container terminated for different reason", "containerName", cntSt.Name, "reason", cntSt.State.Terminated.Reason)
+			return false, nil
+		}
+		lh.Info("container OOMKilled", "containerName", cntSt.Name)
+		return true, nil
+	}).WithTemplate("Pod {{.Actual.Namespace}}/{{.Actual.Name}} UID {{.Actual.UID}} was not OOMKilled")
+}
+
+func findTerminatedContainerStatus(statuses []corev1.ContainerStatus) *corev1.ContainerStatus {
+	for idx := range statuses {
+		cntSt := &statuses[idx]
+		if cntSt.State.Terminated != nil {
+			return cntSt
+		}
+	}
+	return nil
+}

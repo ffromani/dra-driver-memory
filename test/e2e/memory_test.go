@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -32,6 +33,7 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/fixture"
 	"github.com/ffromani/dra-driver-memory/test/pkg/node"
 	"github.com/ffromani/dra-driver-memory/test/pkg/pod"
+	"github.com/ffromani/dra-driver-memory/test/pkg/result"
 )
 
 var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("tier0", "memory", "allocation", "platform:kind"), func() {
@@ -115,11 +117,13 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					Name:      "pod-with-memory",
 				},
 				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
 							Name:    "container-with-memory",
-							Image:   "registry.fedoraproject.org/fedora-minimal:42",
-							Command: []string{"/bin/sleep", "inf"},
+							Image:   dramemoryTesterImage,
+							Command: []string{"/bin/dramemtester"},
+							Args:    []string{"-use-hugetlb=false", "-alloc-size=480m", "-single-numa", "-run-forever"}, // keep a safe margin
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
@@ -145,6 +149,93 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			gomega.Expect(createdPod).ToNot(gomega.BeNil())
+
+			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			res, err := result.FromLogs(logs)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
+			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+		})
+
+		ginkgo.It("should run and fail a pod which allocates exceeding the limits", ginkgo.Label("negative"), func(ctx context.Context) {
+			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			claimTmpl := resourcev1.ResourceClaimTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "memory-512m",
+				},
+				Spec: resourcev1.ResourceClaimTemplateSpec{
+					Spec: resourcev1.ResourceClaimSpec{
+						Devices: resourcev1.DeviceClaim{
+							Requests: []resourcev1.DeviceRequest{
+								{
+									Name: "mem",
+									Exactly: &resourcev1.ExactDeviceRequest{
+										DeviceClassName: "dra.memory",
+										Capacity: &resourcev1.CapacityRequirements{
+											Requests: map[resourcev1.QualifiedName]resource.Quantity{
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(512*(1<<20), resource.BinarySI),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			createdTmpl, err := fxt.K8SClientset.ResourceV1().ResourceClaimTemplates(fxt.Namespace.Name).Create(ctx, &claimTmpl, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdTmpl).ToNot(gomega.BeNil())
+
+			fixture.By("creating a pod consuming the ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			testPod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "pod-over-memory",
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:    "container-over-memory",
+							Image:   dramemoryTesterImage,
+							Command: []string{"/bin/dramemtester"},
+							Args:    []string{"-use-hugetlb=false", "-alloc-size=520m", "-should-fail"},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+									corev1.ResourceMemory: *resource.NewQuantity(512*(1<<20), resource.BinarySI),
+								},
+								Claims: []corev1.ResourceClaim{
+									{
+										Name: "mem",
+									},
+								},
+							},
+						},
+					},
+					ResourceClaims: []corev1.PodResourceClaim{
+						{
+							Name:                      "mem",
+							ResourceClaimTemplateName: ptr.To("memory-512m"),
+						},
+					},
+				},
+			}
+
+			createdPod, err := fxt.K8SClientset.CoreV1().Pods(testPod.Namespace).Create(ctx, &testPod, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			gomega.Eventually(func() *corev1.Pod {
+				pod, err := fxt.K8SClientset.CoreV1().Pods(createdPod.Namespace).Get(ctx, createdPod.Name, metav1.GetOptions{})
+				if err != nil {
+					return nil
+				}
+				return pod
+			}).WithTimeout(time.Minute).WithPolling(2 * time.Second).Should(BeOOMKilled(fxt.Log))
 		})
 	})
 })
