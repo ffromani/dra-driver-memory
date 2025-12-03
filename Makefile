@@ -57,6 +57,9 @@ build-setup-containerd: ## build the containerd configuration setup helper
 build-test-dramemtester: ## build helper to serve as entry point and report memory allocation
 	go build -v -o "$(OUT_DIR)/dramemtester" ./test/image/dramemtester
 
+build-tool-cgroup-inspector: ## build cgroup-inspector tool
+	go build -v -o "$(OUT_DIR)/cgroup-inspector" ./tools/cgroup-inspector
+
 clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
@@ -130,6 +133,7 @@ build-test-image: ## build tests image
 		--platform="${PLATFORMS}" \
 		--tag="${IMAGE_TEST}" \
 		--load
+
 
 # no need to push the test image
 # never push the CI image! it intentionally refers to a non-existing registry
