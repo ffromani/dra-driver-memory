@@ -84,6 +84,10 @@ $(OUT_DIR):  ## creates the output directory (used internally)
 vet:  ## vet the source code tree
 	go vet ./pkg/... ./internal/... ./cmd/...
 
+lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
+	$(GOLANGCI_LINT) run ./...
+	$(SHELLCHECK) ./config/setup.sh
+
 # get image name from directory we're building
 CLUSTER_NAME=dra-driver-memory
 STAGING_REPO_NAME=dra-driver-memory
@@ -138,10 +142,6 @@ ci-kind-setup: ci-manifests build-image ## setup a CI cluster from scratch
 
 ci-kind-teardown:  ## teardown a CI cluster
 	kind delete cluster --name ${CLUSTER_NAME}
-
-lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
-	$(GOLANGCI_LINT) run ./...
-	$(SHELLCHECK) ./config/setup.sh
 
 $(GOLANGCI_LINT): dep-install-golangci-lint
 $(SHELLCHECK): dep-insatall-shellcheck
