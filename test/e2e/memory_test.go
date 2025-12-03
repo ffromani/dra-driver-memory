@@ -123,7 +123,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 							Name:    "container-with-memory",
 							Image:   dramemoryTesterImage,
 							Command: []string{"/bin/dramemtester"},
-							Args:    []string{"-use-hugetlb=false", "-alloc-size=480m", "-single-numa", "-run-forever"}, // keep a safe margin
+							Args:    []string{"-use-hugetlb=false", "-alloc-size=480m", "-numa-align=single", "-run-forever"}, // keep a safe margin
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
