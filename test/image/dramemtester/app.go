@@ -1,0 +1,212 @@
+/*
+ * Copyright 2025 The Kubernetes Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package main
+
+import (
+	"flag"
+	"log"
+	"os"
+	"os/signal"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
+	"golang.org/x/sys/unix"
+
+	"k8s.io/utils/cpuset"
+
+	"github.com/ffromani/dra-driver-memory/pkg/cgroups"
+	"github.com/ffromani/dra-driver-memory/pkg/hugepages"
+	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
+	"github.com/ffromani/dra-driver-memory/pkg/unitconv"
+	"github.com/ffromani/dra-driver-memory/test/pkg/memalign"
+	"github.com/ffromani/dra-driver-memory/test/pkg/result"
+)
+
+func main() {
+	var useHugeTLB bool = true
+	var runForever bool
+	var singleNUMA bool
+	var shouldFail bool
+	var procRoot string = "/"
+	var sysRoot string = "/"
+	var numaNodes cpuset.CPUSet = cpuset.New(0)
+	var allocSize uint64 = uint64(8 * (1 << 20)) // bytes
+
+	flag.BoolVar(&runForever, "run-forever", runForever, "Run forever after the operation is completed.")
+	flag.BoolVar(&useHugeTLB, "use-hugetlb", useHugeTLB, "Use HugeTLB for allocation.")
+	flag.BoolVar(&singleNUMA, "single-numa", singleNUMA, "Check the allocations all come from a single NUMA node, whatever it is.")
+	flag.BoolVar(&shouldFail, "should-fail", shouldFail, "Expect failure, not success.")
+	flag.StringVar(&procRoot, "proc-root", procRoot, "procfs root path.")
+	flag.StringVar(&sysRoot, "sys-root", sysRoot, "sysfs root path.")
+	flag.Var(&CPUSetValue{CPUs: &numaNodes}, "numa-nodes", "Expected NUMA Nodes to allocate memory from.")
+	flag.Var(&UnitValue{SizeInBytes: &allocSize}, "alloc-size", "Amount of memory to allocate.")
+	flag.Parse()
+
+	var lh logr.Logger = stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
+
+	res := result.New(allocSize, useHugeTLB, numaNodes.String())
+
+	var mgr *Manager
+	if runForever {
+		mgr = NewManagerWaiting(res)
+	} else {
+		mgr = NewManager(res)
+	}
+
+	disc := sysinfo.NewDiscoverer(sysRoot)
+
+	prot := unix.PROT_READ | unix.PROT_WRITE
+	flags := unix.MAP_ANONYMOUS | unix.MAP_PRIVATE
+	if useHugeTLB {
+		flags |= unix.MAP_HUGETLB
+	}
+
+	lh.Info("mmap", "size", unitconv.SizeInBytesToMinimizedString(allocSize), "prot", prot, "flags", flags)
+
+	logCurrentLimits(lh.WithValues("trace", "pre"), disc, procRoot)
+	data, err := unix.Mmap(-1, 0, int(allocSize), prot, flags)
+	logCurrentLimits(lh.WithValues("trace", "pos"), disc, procRoot)
+
+	if err != nil {
+		if shouldFail && err == unix.ENOMEM { // TODO: is equality check the best option here?
+			mgr.Success("Allocation failed as expected with 'ENOMEM' (Out of memory)")
+		}
+		// Any other error is a different problem
+		mgr.Failure(1, result.UnexpectedMMapError, "mmap error: %v", err)
+	}
+
+	checkAllocatedMemory(data)
+
+	memNodes, err := memalign.NUMANodesByPID(lh, memalign.PIDSelf, procRoot)
+	if err != nil {
+		mgr.Failure(2, result.CannotCheckAllocation, "cannot check allocation: %v", err)
+	}
+
+	// note no explicit cleanup: we are exiting anyway
+	switch {
+	case singleNUMA && memNodes.Size() != 1:
+		mgr.Failure(4, result.NUMAOverflown, "NUMA nodes allocation don't come from a single NUMA node: %v", memNodes.String())
+	case !numaNodes.Equals(memNodes):
+		mgr.Failure(4, result.NUMAMismatch, "NUMA nodes allocation mismatch expected=%v actual=%v", numaNodes.String(), memNodes.String())
+	default:
+		// happy path, all good
+		mgr.Success("completed")
+	}
+}
+
+type Manager struct {
+	res      *result.Result
+	signalCh chan os.Signal
+}
+
+func NewManager(res *result.Result) *Manager {
+	return &Manager{
+		res: res,
+	}
+}
+
+func NewManagerWaiting(res *result.Result) *Manager {
+	mgr := &Manager{
+		res:      res,
+		signalCh: make(chan os.Signal, 2),
+	}
+	signal.Notify(mgr.signalCh, os.Interrupt, unix.SIGINT)
+	return mgr
+}
+
+func (pl *Manager) Success(fmt_ string, args ...any) {
+	if pl.signalCh != nil {
+		fmt_ = "waiting for a signal to quit; " + fmt_
+	}
+	pl.res.Finalize(0, result.Succeeded, fmt_, args...)
+	if pl.signalCh != nil {
+		<-pl.signalCh
+	}
+	os.Exit(0)
+}
+
+func (pl *Manager) Failure(code int, reason result.Reason, fmt_ string, args ...any) {
+	pl.res.Finalize(code, reason, fmt_, args...)
+	if pl.signalCh != nil {
+		<-pl.signalCh
+	}
+	os.Exit(code)
+}
+
+func checkAllocatedMemory(data []byte) {
+	// write memory to ensure the kernel actually allocates to us
+	// this can trigger an abort (SIGBUS/SIGSEGV) in the worst case,
+	// and we can't recover
+	for i := range data {
+		data[i] = 42
+	}
+}
+
+type CPUSetValue struct {
+	CPUs *cpuset.CPUSet
+}
+
+func (v CPUSetValue) String() string {
+	if v.CPUs == nil {
+		return ""
+	}
+	return v.CPUs.String()
+}
+
+func (v CPUSetValue) Set(s string) error {
+	cpus, err := cpuset.Parse(s)
+	if err != nil {
+		return err
+	}
+	*v.CPUs = cpus
+	return nil
+}
+
+type UnitValue struct {
+	SizeInBytes *uint64
+}
+
+func (v UnitValue) String() string {
+	if v.SizeInBytes == nil {
+		return ""
+	}
+	return unitconv.SizeInBytesToMinimizedString(*v.SizeInBytes)
+}
+
+func (v UnitValue) Set(s string) error {
+	val, err := unitconv.MinimizedStringToSizeInBytes(s)
+	if err != nil {
+		return err
+	}
+	*v.SizeInBytes = val
+	return nil
+}
+
+// intentionally swallows error
+func logCurrentLimits(lh logr.Logger, disc *sysinfo.Discoverer, procRoot string) {
+	machineData, err := disc.GetFreshMachineData(lh)
+	if err != nil {
+		return
+	}
+	limits, err := hugepages.LimitsFromSystemPID(lh, machineData, procRoot, cgroups.PIDSelf)
+	if err != nil {
+		return
+	}
+	for _, limit := range limits {
+		lh.Info("hugepage", "limit", limit.String())
+	}
+}

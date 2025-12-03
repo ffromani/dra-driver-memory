@@ -1,0 +1,29 @@
+00400000 default file=/usr/bin/dramemtester mapped=214 active=0 N0=40 N1=174 kernelpagesize_kB=4
+004d6000 default file=/usr/bin/dramemtester mapped=239 active=0 N0=88 N1=151 kernelpagesize_kB=4
+005d5000 default file=/usr/bin/dramemtester anon=6 dirty=6 mapped=15 active=0 N0=6 N1=9 kernelpagesize_kB=4
+005e4000 default anon=16 dirty=16 active=0 N0=16 kernelpagesize_kB=4
+c000000000 default anon=177 dirty=177 active=0 N0=177 kernelpagesize_kB=4
+c000400000 default
+7ff996600000 default anon=122880 dirty=122880 active=0 N0=122880 kernelpagesize_kB=4
+7ff9b4780000 default anon=8 dirty=8 active=0 N0=8 kernelpagesize_kB=4
+7ff9b4800000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9b6800000 default
+7ff9c6980000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9c6981000 default
+7ff9e6980000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9e6981000 default
+7ff9f8830000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9f8831000 default
+7ff9fac06000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9fac07000 default
+7ff9fb035000 default anon=2 dirty=2 active=0 N0=2 kernelpagesize_kB=4
+7ff9fb055000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9fb155000 default anon=2 dirty=2 active=0 N0=2 kernelpagesize_kB=4
+7ff9fb166000 default
+7ff9fb1e6000 default anon=1 dirty=1 active=0 N0=1 kernelpagesize_kB=4
+7ff9fb1e7000 default
+7ff9fb266000 default anon=18 dirty=18 active=0 N0=18 kernelpagesize_kB=4
+7ff9fb2c6000 default
+7ff9fb2ca000 default
+7ff9fb2cc000 default
+7ffd4ddf3000 default stack anon=3 dirty=3 active=0 N0=3 kernelpagesize_kB=4
