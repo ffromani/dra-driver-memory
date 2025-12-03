@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /bin/dramemory -inspect
+exec /bin/dramemory -inspect raw
