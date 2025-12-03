@@ -189,7 +189,7 @@ func LimitsFromSystemPath(lh logr.Logger, machineData sysinfo.MachineData, cgPat
 		val, err := cgroups.ParseValue(lh, cgPath, fileName)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				val = 0
+				val = -1
 			} else {
 				lh.V(2).Error(err, "parsing limit", "path", cgPath, "file", fileName)
 				continue
