@@ -210,14 +210,34 @@ func LimitsFromSystemPath(lh logr.Logger, machineData sysinfo.MachineData, cgPat
 }
 
 func SetSystemLimits(lh logr.Logger, cgPath string, limits []Limit) error {
+	/* doortrap: HugeTLB Cgroup v2 Limits
+	 * When setting hugepage limits in Cgroup v2, we MUST set two distinct values.
+	 * Failing to set the reservation limit is will cause amibguous ENOMEM failures.
+	 *
+	 * 1. Usage Limit (hugetlb.<size>.max):
+	 * - Controls: The actual physical RAM currently consumed (faulted in).
+	 * - Enforced: When the app writes to memory.
+	 *
+	 * 2. Reservation Limit (hugetlb.<size>.rsvd.max):
+	 * - Controls: The "promise" of pages that the kernel guarantees will be available.
+	 * - Enforced: When the app calls mmap(MAP_HUGETLB).
+	 *
+	 * When an application calls mmap(), it hasn't used memory yet (Usage=0), but it demands
+	 * a guarantee (Reservation). If 'rsvd.max' is 0 (default) but 'max' is > 0, the kernel
+	 * allows 0 bytes of reservation. The mmap() call fails immediately with ENOMEM, despite
+	 * the visible usage limit looking correct.
+	 * So: always sync 'rsvd.max' to at least the value of 'max'.
+	 */
+	attrs := []string{".rsvd.max", ".max"}
 	for _, limit := range limits {
-		// all the kernel interfaces use a different naming :\
-		fileName := "hugetlb." + limit.PageSize + ".max"
 		value := convertLimitValue(limit.Limit)
-		lh.V(2).Info("setting limit", "cgPath", cgPath, "file", fileName, "value", value)
-		err := cgroups.WriteValue(lh, cgPath, fileName, value)
-		if err != nil {
-			return err
+		for _, attr := range attrs {
+			fileName := "hugetlb." + limit.PageSize + attr
+			lh.V(2).Info("setting limit", "cgPath", cgPath, "file", fileName, "value", value)
+			err := cgroups.WriteValue(lh, cgPath, fileName, value)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
