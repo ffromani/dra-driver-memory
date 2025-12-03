@@ -18,6 +18,8 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 
 	"github.com/containerd/nri/pkg/api"
@@ -97,12 +99,34 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	return adjust, updates, nil
 }
 
+func (mdrv *MemoryDriver) UpdatePodSandbox(ctx context.Context, pod *api.PodSandbox, over *api.LinuxResources, res *api.LinuxResources) error {
+	lh := mdrv.logrFromContext(ctx)
+	lh = lh.WithName("UpdatePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
+
+	lh.V(2).Info("updates", "overhead", toJSON(over), "resources", toJSON(res))
+
+	return nil
+}
+
+func (mdrv *MemoryDriver) UpdateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container, res *api.LinuxResources) ([]*api.ContainerUpdate, error) {
+	lh := mdrv.logrFromContext(ctx)
+	lh = lh.WithName("UpdateContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
+	lh.V(4).Info("start")
+	defer lh.V(4).Info("done")
+
+	lh.V(2).Info("updates", "resources", toJSON(res))
+	return nil, nil
+}
+
 func (mdrv *MemoryDriver) StopContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) ([]*api.ContainerUpdate, error) {
 	lh := mdrv.logrFromContext(ctx)
 	lh = lh.WithName("StopContainer").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "container", ctr.Name, "containerID", ctr.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
+	// TODO: downsize the pod limits?
 	return nil, nil
 }
 
@@ -160,4 +184,12 @@ func (mdrv *MemoryDriver) setPodLimits(lh logr.Logger, cgroupParent string) erro
 		return err
 	}
 	return nil
+}
+
+func toJSON(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("<JSON marshal error: %v>", err)
+	}
+	return string(data)
 }
