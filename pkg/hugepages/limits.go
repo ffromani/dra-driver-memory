@@ -19,6 +19,7 @@ package hugepages
 import (
 	"errors"
 	"io/fs"
+	"strings"
 
 	"github.com/go-logr/logr"
 
@@ -33,6 +34,38 @@ type LimitValue struct {
 	Unset bool   `json:"unset"`
 }
 
+func (lv LimitValue) Clone() LimitValue {
+	return LimitValue{
+		Value: lv.Value,
+		Unset: lv.Unset,
+	}
+}
+
+func (lv LimitValue) Add(x LimitValue) LimitValue {
+	if lv.Unset && x.Unset {
+		return LimitValue{
+			Value: 0,
+			Unset: true,
+		}
+	}
+	if lv.Unset && !x.Unset {
+		return LimitValue{
+			Value: x.Value,
+			Unset: false,
+		}
+	}
+	if !lv.Unset && x.Unset {
+		return LimitValue{
+			Value: lv.Value,
+			Unset: false,
+		}
+	}
+	return LimitValue{
+		Value: lv.Value + x.Value,
+		Unset: false,
+	}
+}
+
 // Limit is a Plain-Old-Data struct we carry around to do our computations;
 // this way we can set `runtimeapi.HugepageLimit` once and avoid copies.
 type Limit struct {
@@ -44,11 +77,65 @@ type Limit struct {
 	Limit LimitValue `json:"limit"`
 }
 
+func (lim Limit) Clone() Limit {
+	return Limit{
+		PageSize: lim.PageSize,
+		Limit:    lim.Limit.Clone(),
+	}
+}
+
 func (lim Limit) String() string {
 	if lim.Limit.Unset {
 		return lim.PageSize + "=max"
 	}
 	return lim.PageSize + "=" + unitconv.SizeInBytesToCGroupString(lim.Limit.Value)
+}
+
+// SumLimits add limits "llb" to the existing "lla".
+// Note we expect to have <= 4 limits, so the simplest nested for should be perfectly fine.
+func SumLimits(lla, llb []Limit) []Limit {
+	var ret []Limit
+	for idxa := range lla {
+		found := false
+		for idxb := range llb {
+			if lla[idxa].PageSize == llb[idxb].PageSize {
+				found = true
+				ret = append(ret, Limit{
+					PageSize: lla[idxa].PageSize,
+					Limit:    lla[idxa].Limit.Add(llb[idxb].Limit),
+				})
+				break
+			}
+		}
+		if !found {
+			ret = append(ret, lla[idxa].Clone())
+		}
+	}
+	for idxb := range llb {
+		found := false
+		for idxa := range lla {
+			if llb[idxb].PageSize == lla[idxa].PageSize {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ret = append(ret, llb[idxb].Clone())
+		}
+	}
+	return ret
+}
+
+func LimitsToString(lls []Limit) string {
+	if len(lls) == 0 {
+		return ""
+	}
+	sep := ", "
+	var sb strings.Builder
+	for _, lim := range lls {
+		sb.WriteString(sep + lim.String())
+	}
+	return strings.TrimPrefix(sb.String(), sep)
 }
 
 func LimitsFromAllocations(lh logr.Logger, machineData sysinfo.MachineData, allocs []types.Allocation) []Limit {
