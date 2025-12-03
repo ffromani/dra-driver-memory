@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: reference-
+spec:
+  containers:
+  - name: reference
+    image: quay.io/fromani/dramemtester:v0.0.20251203
+    imagePullPolicy: Always
+    command: ["/bin/dramemtester", "-run-forever", "-numa-align=any", "-use-hugetlb=true", "-alloc-size=128m"]
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+        hugepages-2Mi: 256Mi
