@@ -18,17 +18,17 @@ ARG TARGETARCH
 ARG GOARCH=${TARGETARCH} CGO_ENABLED=0
 
 # cache go modules
-WORKDIR /go/src/app
+WORKDIR /go/src/drv
 COPY go.mod go.sum .
 RUN go mod download
 
 # build
 COPY . .
-RUN go build -o /go/bin/dramemtester ./test/image/dramemtester
+RUN make build-test-dramemtester
 
 # copy binaries onto base image
 FROM registry.fedoraproject.org/fedora-minimal:43
 RUN rpm -ivh http://fedora.ipacct.com/fedora/linux/updates/43/Everything/x86_64/Packages/p/procps-ng-4.0.4-7.fc43.1.x86_64.rpm
-COPY --from=builder --chown=root:root /go/bin/dramemtester /bin/dramemtester
+COPY --from=builder --chown=root:root /go/src/drv/bin/dramemtester /bin/dramemtester
 CMD ["/bin/dramemtester"]
 

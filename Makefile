@@ -49,13 +49,13 @@ build: build-dramemory build-setuphelpers ## build all the binaries
 build-dramemory: ## build dramemory
 	go build -v -o "$(OUT_DIR)/dramemory" ./cmd/dramemory
 
-build-setuphelpers: build-setup-containerd ## build the configuration setup helpers
-
-build-setup-containerd: ## build the containerd configuration setup helper
-	go build -v -o "$(OUT_DIR)/setup-containerd" ./config/containerd
+build-setuphelpers: build-tool-setup-containerd ## build the configuration setup helpers
 
 build-test-dramemtester: ## build helper to serve as entry point and report memory allocation
 	go build -v -o "$(OUT_DIR)/dramemtester" ./test/image/dramemtester
+
+build-tool-setup-containerd: ## build the containerd configuration setup helper
+	go build -v -o "$(OUT_DIR)/setup-containerd" ./tools/setup/containerd
 
 build-tool-cgroup-inspector: ## build cgroup-inspector tool
 	go build -v -o "$(OUT_DIR)/cgroup-inspector" ./tools/cgroup-inspector
@@ -92,7 +92,7 @@ vet:  ## vet the source code tree
 
 lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...
-	$(SHELLCHECK) ./config/setup.sh
+	$(SHELLCHECK) ./tools/setup/setup.sh
 
 # get image name from directory we're building
 CLUSTER_NAME=dra-driver-memory

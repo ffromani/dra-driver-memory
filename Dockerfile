@@ -23,13 +23,12 @@ RUN go mod download
 
 # build
 COPY . .
-RUN go build -o /go/bin/dramemory ./cmd/dramemory
-RUN go build -o /go/bin/setup-containerd ./config/containerd/setup.go
+RUN make build
 
 # copy binary onto base image
 FROM busybox:1.36.1-glibc
-COPY --from=builder --chown=root:root /go/bin/dramemory /bin/dramemory
-COPY --from=builder --chown=root:root /go/bin/setup-containerd /bin/setup-containerd
-COPY --from=builder --chown=root:root /go/src/drv/config/setup.sh /bin/setup.sh
+COPY --from=builder --chown=root:root /go/src/drv/bin/dramemory /bin/dramemory
+COPY --from=builder --chown=root:root /go/src/drv/bin/setup-containerd /bin/setup-containerd
+COPY --from=builder --chown=root:root /go/src/drv/tools/setup/setup.sh /bin/setup.sh
 COPY --from=builder --chown=root:root /go/src/drv/hack/drameminfo /bin/drameminfo
 CMD ["/bin/dramemory"]
