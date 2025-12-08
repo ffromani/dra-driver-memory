@@ -48,6 +48,10 @@ type Manager struct {
 	driverName string
 }
 
+func MakeKind(vendor, class string) string {
+	return vendor + "/" + class
+}
+
 // NewManager creates a manager for the driver's CDI spec file.
 func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 	path := filepath.Join(SpecDir, fmt.Sprintf("%s.json", driverName))
@@ -57,10 +61,9 @@ func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("error creating CDI spec directory %q: %w", SpecDir, err)
 	}
 
-	cdiKind := Vendor + "/" + Class
 	mgr := &Manager{
 		path:       path,
-		cdiKind:    cdiKind,
+		cdiKind:    MakeKind(Vendor, Class),
 		driverName: driverName,
 	}
 

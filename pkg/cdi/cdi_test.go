@@ -226,3 +226,60 @@ func TestRemoveDevice(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveDeviceNotFound(t *testing.T) {
+	saveCDIDir := SpecDir
+	t.Cleanup(func() {
+		SpecDir = saveCDIDir
+	})
+	SpecDir = t.TempDir()
+	logger := testr.New(t)
+
+	mgr, err := NewManager(testDriverName, logger)
+	require.NoError(t, err)
+
+	// Remove a device that doesn't exist - should not error
+	err = mgr.RemoveDevice(logger, "nonexistent")
+	require.NoError(t, err)
+}
+
+func TestNewManagerExistingSpec(t *testing.T) {
+	saveCDIDir := SpecDir
+	t.Cleanup(func() {
+		SpecDir = saveCDIDir
+	})
+	SpecDir = t.TempDir()
+	logger := testr.New(t)
+
+	// Create an initial manager and add a device
+	mgr1, err := NewManager(testDriverName, logger)
+	require.NoError(t, err)
+	err = mgr1.AddDevice(logger, "existingdev", "VAR=value")
+	require.NoError(t, err)
+
+	// Create a new manager - should load existing spec
+	mgr2, err := NewManager(testDriverName, logger)
+	require.NoError(t, err)
+
+	spec, err := mgr2.GetSpec(logger)
+	require.NoError(t, err)
+	require.Len(t, spec.Devices, 1)
+	require.Equal(t, "existingdev", spec.Devices[0].Name)
+}
+
+func TestEmptySpec(t *testing.T) {
+	saveCDIDir := SpecDir
+	t.Cleanup(func() {
+		SpecDir = saveCDIDir
+	})
+	SpecDir = t.TempDir()
+	logger := testr.New(t)
+
+	mgr, err := NewManager(testDriverName, logger)
+	require.NoError(t, err)
+
+	spec := mgr.EmptySpec()
+	require.Equal(t, SpecVersion, spec.Version)
+	require.Equal(t, Vendor+"/"+Class, spec.Kind)
+	require.Empty(t, spec.Devices)
+}

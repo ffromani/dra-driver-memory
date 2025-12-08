@@ -171,3 +171,61 @@ func TestExtractAll(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractAllWithMixedEnvs(t *testing.T) {
+	logger := testr.New(t)
+	uid := k8stypes.UID("TESTUID")
+	alloc := types.Allocation{
+		ResourceIdent: types.ResourceIdent{
+			Kind:     types.Hugepages,
+			Pagesize: 2 * (1 << 20),
+		},
+		Amount:   16 * (1 << 20),
+		NUMAZone: 1,
+	}
+	nodes := sets.New[int64](1)
+
+	// Mix DRA env vars with non-DRA env vars
+	envs := []string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/home/user",
+		CreateAlloc(logger, uid, alloc),
+		"LD_LIBRARY_PATH=/usr/lib",
+		CreateNUMANodes(logger, uid, nodes),
+		"TERM=xterm",
+	}
+
+	expNodes := map[k8stypes.UID]cpuset.CPUSet{
+		uid: cpuset.New(0),
+	}
+	expSpans := map[k8stypes.UID]types.Allocation{
+		uid: {
+			ResourceIdent: types.ResourceIdent{
+				Kind:     types.Hugepages,
+				Pagesize: 2 * (1 << 20),
+			},
+			Amount:   16 * (1 << 20),
+			NUMAZone: 1,
+		},
+	}
+
+	gotNodes, gotSpans, err := ExtractAll(logger, envs, sets.New(alloc.Name()))
+	require.NoError(t, err)
+	require.Len(t, gotNodes, 1)
+	if diff := cmp.Diff(expNodes, gotNodes, cmpopts.IgnoreUnexported(cpuset.CPUSet{})); diff != "" {
+		t.Errorf("nodes mismatch: %v", diff)
+	}
+	require.Len(t, gotSpans, 1)
+	if diff := cmp.Diff(expSpans, gotSpans); diff != "" {
+		t.Errorf("spans mismatch: %v", diff)
+	}
+}
+
+func TestExtractAllEmptyEnvs(t *testing.T) {
+	logger := testr.New(t)
+
+	gotNodes, gotSpans, err := ExtractAll(logger, []string{}, sets.New[string]())
+	require.NoError(t, err)
+	require.Empty(t, gotNodes)
+	require.Empty(t, gotSpans)
+}
