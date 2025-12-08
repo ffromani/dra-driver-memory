@@ -32,7 +32,7 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/node"
 )
 
-var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("setup", "hugepages:2M", "hugepages:1G"), func() {
+var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("setup"), func() {
 	var rootFxt *fixture.Fixture
 	var targetNode *v1.Node
 
@@ -69,30 +69,32 @@ var _ = ginkgo.Describe("Machine Setup", ginkgo.Serial, ginkgo.Ordered, ginkgo.C
 			gomega.Expect(fxt.Teardown(ctx)).To(gomega.Succeed())
 		})
 
-		ginkgo.It("should configure HugeTLB support", func(ctx context.Context) {
-			fixture.By("getting the containerd configuration for target node %q", targetNode.Name)
-			// the awk part combines grep and tail. We store all the entries, we emit the last stored once `awk` ends.
-			// note we sneak in another optimization: we only return the `config={...}` portion column 11. A line would look like:
-			// columns:
-			// 1   2  3        4                        5                6                                     7          8             9   10      11
-			// Nov 17 13:03:33 dra-driver-memory-worker containerd[112]: time="2025-11-17T13:03:33.453648941Z" level=info msg="starting cri plugin" config="{\"containerd\":{ ...
-			cmdline := fmt.Sprintf("docker exec %s journalctl -u containerd | awk '/starting cri plugin/ { CONF=$11 } END { print CONF }'", targetNode.Name)
-			fxt.Log.Info("about to run", "commandLine", cmdline)
+		ginkgo.When("using containerd as runtime", ginkgo.Label("runtime:containerd"), func() {
+			ginkgo.It("should configure HugeTLB support", func(ctx context.Context) {
+				fixture.By("getting the containerd configuration for target node %q", targetNode.Name)
+				// the awk part combines grep and tail. We store all the entries, we emit the last stored once `awk` ends.
+				// note we sneak in another optimization: we only return the `config={...}` portion column 11. A line would look like:
+				// columns:
+				// 1   2  3        4                        5                6                                     7          8             9   10      11
+				// Nov 17 13:03:33 dra-driver-memory-worker containerd[112]: time="2025-11-17T13:03:33.453648941Z" level=info msg="starting cri plugin" config="{\"containerd\":{ ...
+				cmdline := fmt.Sprintf("docker exec %s journalctl -u containerd | awk '/starting cri plugin/ { CONF=$11 } END { print CONF }'", targetNode.Name)
+				fxt.Log.Info("about to run", "commandLine", cmdline)
 
-			cmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmdline)
-			out, err := cmd.Output()
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					fxt.Log.Info("command failed", "stderr", string(exitErr.Stderr))
+				cmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmdline)
+				out, err := cmd.Output()
+				if err != nil {
+					if exitErr, ok := err.(*exec.ExitError); ok {
+						fxt.Log.Info("command failed", "stderr", string(exitErr.Stderr))
+					}
 				}
-			}
-			gomega.Expect(err).ToNot(gomega.HaveOccurred(), "error getting the containerd raw configuration from target node")
-			rawConf := string(out)
-			fxt.Log.Info("found raw configuration", "rawConf", rawConf)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred(), "error getting the containerd raw configuration from target node")
+				rawConf := string(out)
+				fxt.Log.Info("found raw configuration", "rawConf", rawConf)
 
-			gomega.Expect(rawConf).ToNot(gomega.BeEmpty(), "the raw configuration is empty")
-			gomega.Expect(rawConf).To(gomega.ContainSubstring(`\"disableHugetlbController\":false`))
-			gomega.Expect(rawConf).To(gomega.ContainSubstring(`\"tolerateMissingHugetlbController\":false`))
+				gomega.Expect(rawConf).ToNot(gomega.BeEmpty(), "the raw configuration is empty")
+				gomega.Expect(rawConf).To(gomega.ContainSubstring(`\"disableHugetlbController\":false`))
+				gomega.Expect(rawConf).To(gomega.ContainSubstring(`\"tolerateMissingHugetlbController\":false`))
+			})
 		})
 	})
 })
