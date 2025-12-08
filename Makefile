@@ -78,8 +78,12 @@ test-e2e-kind-conf: ## run core E2E tests suitable to run on a kind cluster pert
 test-e2e-kind-mem: ## run core E2E tests suitable to run on a kind cluster pertaining memory allocation
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && memory'
 
-test-e2e-kind-hp: ## run core E2E tests suitable to run on a kind cluster pertaining hugepages allocation
+test-e2e-kind-hp2m: ## run core E2E tests suitable to run on a kind cluster pertaining 2M hugepages allocation
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:2M'
+
+test-e2e-kind-hp1g: ## run core E2E tests suitable to run on a kind cluster pertaining 1G hugepages allocation
+	# TODO: add tier filtering
+	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:1G'
 
 update: ## runs go mod tidy
 	go mod tidy
