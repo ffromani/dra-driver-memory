@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr/testr"
@@ -42,6 +43,22 @@ func TestReadConfiguration(t *testing.T) {
 	require.Len(t, hpConf.Spec.Pages, 1)
 	require.Equal(t, hpConf.Spec.Pages[0].Size, apiv0.HugePageSize("2M"))
 	require.Equal(t, hpConf.Spec.Pages[0].Count, int32(4096))
+}
+
+func TestReadConfigurationFrom(t *testing.T) {
+	reader := strings.NewReader(provision2M)
+
+	hpConf, err := ReadConfigurationFrom(reader)
+	require.NoError(t, err)
+	require.Equal(t, hpConf.Name, "balanced-runtime")
+	require.Len(t, hpConf.Spec.Pages, 1)
+	require.Equal(t, hpConf.Spec.Pages[0].Size, apiv0.HugePageSize("2M"))
+	require.Equal(t, hpConf.Spec.Pages[0].Count, int32(4096))
+}
+
+func TestReadConfigurationFileNotFound(t *testing.T) {
+	_, err := ReadConfiguration("/nonexistent/path/to/file.yaml")
+	require.Error(t, err)
 }
 
 func TestProvisionBaseSingleNode(t *testing.T) {

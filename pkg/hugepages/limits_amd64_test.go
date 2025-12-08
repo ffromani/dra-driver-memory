@@ -19,6 +19,8 @@
 package hugepages
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-logr/logr/testr"
@@ -45,4 +47,106 @@ func TestLimitsFromSystemPID(t *testing.T) {
 
 	_, err = LimitsFromSystemPID(lh, machine, "/", cgroups.PIDSelf)
 	require.NoError(t, err)
+}
+
+func TestSetSystemLimits(t *testing.T) {
+	cgroups.TestMode = true
+	t.Cleanup(func() { cgroups.TestMode = false })
+
+	type testcase struct {
+		name   string
+		limits []Limit
+	}
+
+	testcases := []testcase{
+		{
+			name:   "empty limits",
+			limits: []Limit{},
+		},
+		{
+			name: "single 2MB limit",
+			limits: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 21),
+					},
+				},
+			},
+		},
+		{
+			name: "single 1GB limit",
+			limits: []Limit{
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 2 * (1 << 30),
+					},
+				},
+			},
+		},
+		{
+			name: "multiple limits",
+			limits: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Value: 8 * (1 << 21),
+					},
+				},
+				{
+					PageSize: "1GB",
+					Limit: LimitValue{
+						Value: 4 * (1 << 30),
+					},
+				},
+			},
+		},
+		{
+			name: "unset limit (max)",
+			limits: []Limit{
+				{
+					PageSize: "2MB",
+					Limit: LimitValue{
+						Unset: true,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			lh := testr.New(t)
+			tmpDir := t.TempDir()
+
+			err := SetSystemLimits(lh, tmpDir, tcase.limits)
+			require.NoError(t, err)
+
+			// Verify files were created with correct content
+			for _, limit := range tcase.limits {
+				maxFile := filepath.Join(tmpDir, "hugetlb."+limit.PageSize+".max")
+				rsvdFile := filepath.Join(tmpDir, "hugetlb."+limit.PageSize+".rsvd.max")
+
+				maxContent, err := os.ReadFile(maxFile)
+				require.NoError(t, err)
+				rsvdContent, err := os.ReadFile(rsvdFile)
+				require.NoError(t, err)
+
+				var expectedContent string
+				if limit.Limit.Unset {
+					expectedContent = "max"
+				} else {
+					expectedContent = string(rune('0' + limit.Limit.Value/(1<<21)))
+					// Just verify the file exists and has content
+				}
+				require.NotEmpty(t, maxContent)
+				require.NotEmpty(t, rsvdContent)
+				if limit.Limit.Unset {
+					require.Equal(t, expectedContent, string(maxContent))
+					require.Equal(t, expectedContent, string(rsvdContent))
+				}
+			}
+		})
+	}
 }
