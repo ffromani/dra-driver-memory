@@ -102,6 +102,10 @@ func (fxt *Fixture) Teardown(ctx context.Context) error {
 	return nil
 }
 
+func Skipf(fmts_ string, args ...any) {
+	ginkgo.Skip(fmt.Sprintf(fmts_, args...))
+}
+
 const (
 	nsPollInterval = time.Second * 10
 	nsPollTimeout  = time.Minute * 2

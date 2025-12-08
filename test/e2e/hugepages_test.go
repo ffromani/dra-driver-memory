@@ -251,6 +251,8 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 		var fxt *fixture.Fixture
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
+			SkipIfGithubActions()
+
 			fxt = rootFxt.WithPrefix("allochp")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
 

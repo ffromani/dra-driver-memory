@@ -18,6 +18,8 @@ package e2e
 
 import (
 	"errors"
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -27,6 +29,8 @@ import (
 	"github.com/onsi/gomega/types"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/ffromani/dra-driver-memory/test/pkg/fixture"
 )
 
 func TestE2E(t *testing.T) {
@@ -52,6 +56,19 @@ Please note "Serial" is however unavoidable because we manage the shared node st
 */
 
 // add custom matchers and generic test helpers which we didn't promote yet into `test/pkg` here
+
+func SkipIfGithubActions() {
+	val, ok := os.LookupEnv("GITHUB_ACTIONS")
+	if !ok {
+		return
+	}
+	isGHA, err := strconv.ParseBool(val)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	if !isGHA {
+		return
+	}
+	fixture.Skipf("Github Actions detected: skip flaky/fragile tests")
+}
 
 const (
 	reasonOOMKilled = "OOMKilled"
