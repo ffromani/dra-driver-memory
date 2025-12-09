@@ -30,10 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
-	"k8s.io/klog/v2"
 
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
 	"github.com/ffromani/dra-driver-memory/pkg/env"
+	"github.com/ffromani/dra-driver-memory/pkg/objref"
 	"github.com/ffromani/dra-driver-memory/pkg/types"
 )
 
@@ -115,11 +115,11 @@ func (mdrv *MemoryDriver) HandleError(ctx context.Context, err error, msg string
 
 func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
 	lh, _ := logr.FromContext(ctx)
-	lh = lh.WithName("PrepareResourceClaims").WithValues("claim", klog.KObj(claim))
+	lh = lh.WithName("PrepareResourceClaims").WithValues("claim", objref.KObj(claim))
 
 	if claim.Status.Allocation == nil {
 		return kubeletplugin.PrepareResult{
-			Err: fmt.Errorf("claim %s has no allocation", klog.KObj(claim)),
+			Err: fmt.Errorf("claim %s has no allocation", objref.KObj(claim)),
 		}
 	}
 

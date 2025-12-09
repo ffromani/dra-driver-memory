@@ -118,7 +118,7 @@ spec:
             - /bin/dramemory
           args:
             - -v=6
-            - -cgroup-mount=/sys/fs/cgroup
+            - --cgroup-mount=/sys/fs/cgroup
           image: quay.io/ffromani/dramem:latest
           imagePullPolicy: IfNotPresent
           resources:

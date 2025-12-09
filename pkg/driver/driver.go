@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
-	"k8s.io/klog/v2"
 
 	"github.com/ffromani/dra-driver-memory/pkg/alloc"
 	"github.com/ffromani/dra-driver-memory/pkg/cdi"
@@ -154,7 +153,7 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		// https://github.com/containerd/nri/pull/173
 		// Otherwise it silently exits the program
 		stub.WithOnClose(func() {
-			klog.Infof("%s NRI plugin closed", env.DriverName)
+			env.Logger.Info("NRI plugin closed", "driverName", env.DriverName)
 		}),
 	}
 	stub, err := stub.New(mdrv, nriOpts...)
@@ -167,16 +166,17 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		for i := 0; i < maxAttempts; i++ {
 			err = mdrv.nriPlugin.Run(ctx)
 			if err != nil {
-				klog.Infof("NRI plugin failed with error %v", err)
+				env.Logger.Error(err, "NRI plugin failed")
 			}
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				klog.Infof("Restarting NRI plugin %d out of %d", i, maxAttempts)
+				env.Logger.Info("Restarting NRI plugin", "attempt", i, "maxAttempts", maxAttempts)
 			}
 		}
-		klog.Fatalf("NRI plugin failed for %d times to be restarted", maxAttempts)
+		env.Logger.Info("NRI plugin failed for %d times to be restarted", "maxAttempts", maxAttempts)
+		os.Exit(1)
 	}()
 
 	// publish available resources
