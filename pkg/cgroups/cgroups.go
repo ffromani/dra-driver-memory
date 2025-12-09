@@ -97,7 +97,7 @@ func WriteValue(lh logr.Logger, dir, file string, val int64) error {
 func ParseValue(lh logr.Logger, dir, file string) (int64, error) {
 	contentRaw, err := ReadFile(lh, dir, file)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			// assume no controller enabled or mounted -> no limits
 			return -1, nil
 		}

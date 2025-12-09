@@ -94,6 +94,117 @@ func TestSizeToStringRoundTrip(t *testing.T) {
 	}
 }
 
+func TestNarrowSize(t *testing.T) {
+	type testcase struct {
+		size     uint64
+		expected uint64
+		unit     string
+	}
+
+	testcases := []testcase{
+		{
+			size:     0,
+			expected: 0,
+			unit:     "B",
+		},
+		{
+			size:     1,
+			expected: 1,
+			unit:     "B",
+		},
+		{
+			size:     KiB,
+			expected: 1,
+			unit:     "KiB",
+		},
+		{
+			size:     4 * KiB,
+			expected: 4,
+			unit:     "KiB",
+		},
+		{
+			size:     MiB,
+			expected: 1,
+			unit:     "MiB",
+		},
+		{
+			size:     2 * MiB,
+			expected: 2,
+			unit:     "MiB",
+		},
+		{
+			size:     GiB,
+			expected: 1,
+			unit:     "GiB",
+		},
+		{
+			size:     TiB,
+			expected: 1,
+			unit:     "TiB",
+		},
+		{
+			size:     PiB,
+			expected: 1,
+			unit:     "PiB",
+		},
+		{
+			size:     EiB,
+			expected: 1,
+			unit:     "EiB",
+		},
+		{
+			size:     3*GiB + 512*MiB,
+			expected: 3584,
+			unit:     "MiB",
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(fmt.Sprintf("size=%d", tcase.size), func(t *testing.T) {
+			gotVal, gotUnit := NarrowSize(tcase.size)
+			require.Equal(t, tcase.expected, gotVal)
+			require.Equal(t, tcase.unit, gotUnit)
+		})
+	}
+}
+
+func TestMinimize(t *testing.T) {
+	type testcase struct {
+		input    string
+		expected string
+	}
+
+	testcases := []testcase{
+		{
+			input:    "",
+			expected: "",
+		},
+		{
+			input:    "B",
+			expected: "b",
+		},
+		{
+			input:    "KiB",
+			expected: "k",
+		},
+		{
+			input:    "MiB",
+			expected: "m",
+		},
+		{
+			input:    "GiB",
+			expected: "g",
+		},
+	}
+
+	for _, tcase := range testcases {
+		t.Run(fmt.Sprintf("input=%q", tcase.input), func(t *testing.T) {
+			got := Minimize(tcase.input)
+			require.Equal(t, tcase.expected, got)
+		})
+	}
+}
+
 func TestCGroupStringToSizeRoundTrip(t *testing.T) {
 	type testcase struct {
 		sval string

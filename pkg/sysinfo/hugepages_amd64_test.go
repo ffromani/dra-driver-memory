@@ -50,6 +50,31 @@ func TestHugepageSizes(t *testing.T) {
 			},
 			expected: []string{},
 		},
+		{
+			name: "missing hugepages directory",
+			mkMMTree: func(t *testing.T, root string) {
+				// Don't create the directory
+			},
+			expected: nil,
+		},
+		{
+			name: "with KB size hugepages",
+			mkMMTree: func(t *testing.T, root string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "sys", "kernel", "mm", "hugepages", "hugepages-64kB"), 0755))
+			},
+			expected: []string{"64KB"},
+		},
+		{
+			name: "mixed valid entries",
+			mkMMTree: func(t *testing.T, root string) {
+				hpDir := filepath.Join(root, "sys", "kernel", "mm", "hugepages")
+				require.NoError(t, os.MkdirAll(filepath.Join(hpDir, "hugepages-2048kB"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(hpDir, "hugepages-1048576kB"), 0755))
+				// Create a non-hugepages entry that should be ignored
+				require.NoError(t, os.MkdirAll(filepath.Join(hpDir, "some-other-dir"), 0755))
+			},
+			expected: []string{"1GB", "2MB"},
+		},
 	}
 
 	for _, tcase := range testcases {

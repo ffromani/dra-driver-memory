@@ -18,6 +18,7 @@ package cdi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,6 +49,10 @@ type Manager struct {
 	driverName string
 }
 
+func MakeKind(vendor, class string) string {
+	return vendor + "/" + class
+}
+
 // NewManager creates a manager for the driver's CDI spec file.
 func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 	path := filepath.Join(SpecDir, fmt.Sprintf("%s.json", driverName))
@@ -57,10 +62,9 @@ func NewManager(driverName string, lh logr.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("error creating CDI spec directory %q: %w", SpecDir, err)
 	}
 
-	cdiKind := Vendor + "/" + Class
 	mgr := &Manager{
 		path:       path,
-		cdiKind:    cdiKind,
+		cdiKind:    MakeKind(Vendor, Class),
 		driverName: driverName,
 	}
 
@@ -110,7 +114,7 @@ func (mgr *Manager) RemoveDevice(lh logr.Logger, deviceName string) error {
 
 	spec, err := mgr.readSpecFromFile(lh)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil // File already gone, nothing to do.
 		}
 		return err

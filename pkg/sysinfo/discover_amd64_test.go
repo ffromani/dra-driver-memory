@@ -257,6 +257,47 @@ func TestRefreshWithData(t *testing.T) {
 	}
 }
 
+func TestGetFreshMachineData(t *testing.T) {
+	fakeSysRoot := t.TempDir()
+	logger := testr.New(t)
+
+	expectedMachine := MachineData{
+		Pagesize: 4096,
+		Zones: []Zone{
+			{
+				ID:        0,
+				Distances: []int{10},
+			},
+		},
+	}
+
+	disc := NewDiscoverer(fakeSysRoot)
+	disc.GetMachineData = func(_ logr.Logger, _ string) (MachineData, error) {
+		return expectedMachine, nil
+	}
+
+	gotMachine, err := disc.GetFreshMachineData(logger)
+	require.NoError(t, err)
+	if diff := cmp.Diff(gotMachine, expectedMachine); diff != "" {
+		t.Fatalf("unexpected machine data: %v", diff)
+	}
+}
+
+func TestGetSpanForDeviceNotFound(t *testing.T) {
+	fakeSysRoot := t.TempDir()
+	logger := testr.New(t)
+
+	disc := NewDiscoverer(fakeSysRoot)
+	disc.GetMachineData = func(_ logr.Logger, _ string) (MachineData, error) {
+		return MachineData{}, nil
+	}
+	err := disc.Refresh(logger)
+	require.NoError(t, err)
+
+	_, err = disc.GetSpanForDevice(logger, "nonexistent-device")
+	require.Error(t, err)
+}
+
 func TestGetSpanForDevice(t *testing.T) {
 	type testcase struct {
 		name           string
