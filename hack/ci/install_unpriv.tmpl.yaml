@@ -117,7 +117,7 @@ spec:
           command:
             - /bin/dramemory
           args:
-            - --v=6
+            - -v=6
           image: quay.io/ffromani/dramem:latest
           imagePullPolicy: IfNotPresent
           resources:
