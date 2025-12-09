@@ -38,7 +38,7 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/result"
 )
 
-var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("tier0", "hugepages:2M", "allocation", "platform:kind"), func() {
+var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, ginkgo.ContinueOnFailure, ginkgo.Label("tier0", "allocation", "platform:kind"), func() {
 	var rootFxt *fixture.Fixture
 	var targetNode *corev1.Node
 	var dramemoryTesterImage string
@@ -67,20 +67,20 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			targetNode = workerNodes[0] // pick random one, this is the simplest random pick
 		}
 		rootFxt.Log.Info("using worker node", "nodeName", targetNode.Name)
-
-		rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(rootFxt.Log, ctx, rootFxt.K8SClientset, targetNode.Name, "2m", 32*(1<<20))
-		if !ok {
-			ginkgo.Skip("missing hugepages in resource slices")
-		}
-		rootFxt.Log.Info("found 2M hugepages device", "resourceSlice", rsName, "device", devName)
 	})
 
-	ginkgo.When("requesting hugepages", func() {
+	ginkgo.When("requesting 2M hugepages", ginkgo.Label("hugepages:2M"), func() {
 		var fxt *fixture.Fixture
 
 		ginkgo.BeforeEach(func(ctx context.Context) {
 			fxt = rootFxt.WithPrefix("allochp")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
+
+			rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(fxt.Log, ctx, fxt.K8SClientset, targetNode.Name, "2m", 32*(1<<20))
+			if !ok {
+				ginkgo.Skip("missing hugepages in resource slices")
+			}
+			fxt.Log.Info("found 2M hugepages device", "resourceSlice", rsName, "device", devName)
 		})
 
 		ginkgo.AfterEach(func(ctx context.Context) {
@@ -92,7 +92,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as reequired
+					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as required
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -172,7 +172,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as reequired
+					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as required
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -246,6 +246,187 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.FailedAsExpected))
 		})
 	})
+
+	ginkgo.When("requesting 1G hugepages", ginkgo.Label("hugepages:1G"), func() {
+		var fxt *fixture.Fixture
+
+		ginkgo.BeforeEach(func(ctx context.Context) {
+			SkipIfGithubActions()
+
+			fxt = rootFxt.WithPrefix("allochp")
+			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
+
+			rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(fxt.Log, ctx, fxt.K8SClientset, targetNode.Name, "1g", 2*(1<<30))
+			if !ok {
+				ginkgo.Skip("missing hugepages in resource slices")
+			}
+			fxt.Log.Info("found 1G hugepages device", "resourceSlice", rsName, "device", devName)
+		})
+
+		ginkgo.AfterEach(func(ctx context.Context) {
+			gomega.Expect(fxt.Teardown(ctx)).To(gomega.Succeed())
+		})
+
+		ginkgo.It("should run successfully a pod which allocates within the limits", ginkgo.Label("positive"), func(ctx context.Context) {
+			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			claimTmpl := resourcev1.ResourceClaimTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "hugepages-1g", // TODO: fix the check to ensure we have as many as required
+				},
+				Spec: resourcev1.ResourceClaimTemplateSpec{
+					Spec: resourcev1.ResourceClaimSpec{
+						Devices: resourcev1.DeviceClaim{
+							Requests: []resourcev1.DeviceRequest{
+								{
+									Name: "hp1g",
+									Exactly: &resourcev1.ExactDeviceRequest{
+										DeviceClassName: "dra.hugepages-1g",
+										Capacity: &resourcev1.CapacityRequirements{
+											Requests: map[resourcev1.QualifiedName]resource.Quantity{
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(1*(1<<30), resource.BinarySI),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			createdTmpl, err := fxt.K8SClientset.ResourceV1().ResourceClaimTemplates(fxt.Namespace.Name).Create(ctx, &claimTmpl, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdTmpl).ToNot(gomega.BeNil())
+
+			fixture.By("creating a pod consuming the ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			testPod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "pod-with-hugepages-1g",
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:    "container-with-hugepages-1g",
+							Image:   dramemoryTesterImage,
+							Command: []string{"/bin/dramemtester"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=1g", "-numa-align=single", "-run-forever"},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+									corev1.ResourceMemory: *resource.NewQuantity(4*(1<<30), resource.BinarySI),
+								},
+								Claims: []corev1.ResourceClaim{
+									{
+										Name: "hp1g",
+									},
+								},
+							},
+						},
+					},
+					ResourceClaims: []corev1.PodResourceClaim{
+						{
+							Name:                      "hp1g",
+							ResourceClaimTemplateName: ptr.To("hugepages-1g"),
+						},
+					},
+				},
+			}
+
+			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdPod).ToNot(gomega.BeNil())
+
+			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			res, err := result.FromLogs(logs)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
+			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+		})
+
+		ginkgo.It("should run and fail a pod which allocates exceeding the limits", ginkgo.Label("negative"), func(ctx context.Context) {
+			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			claimTmpl := resourcev1.ResourceClaimTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "hugepages-1g", // TODO: fix the check to ensure we have as many as required
+				},
+				Spec: resourcev1.ResourceClaimTemplateSpec{
+					Spec: resourcev1.ResourceClaimSpec{
+						Devices: resourcev1.DeviceClaim{
+							Requests: []resourcev1.DeviceRequest{
+								{
+									Name: "hp1g",
+									Exactly: &resourcev1.ExactDeviceRequest{
+										DeviceClassName: "dra.hugepages-1g",
+										Capacity: &resourcev1.CapacityRequirements{
+											Requests: map[resourcev1.QualifiedName]resource.Quantity{
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(1*(1<<30), resource.BinarySI),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			createdTmpl, err := fxt.K8SClientset.ResourceV1().ResourceClaimTemplates(fxt.Namespace.Name).Create(ctx, &claimTmpl, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdTmpl).ToNot(gomega.BeNil())
+
+			fixture.By("creating a pod consuming the ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			testPod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "pod-over-hugepages-1g",
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:    "container-over-hugepages-1g",
+							Image:   dramemoryTesterImage,
+							Command: []string{"/bin/dramemtester"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=2g", "-should-fail"},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+									corev1.ResourceMemory: *resource.NewQuantity(4*(1<<30), resource.BinarySI),
+								},
+								Claims: []corev1.ResourceClaim{
+									{
+										Name: "hp1g",
+									},
+								},
+							},
+						},
+					},
+					ResourceClaims: []corev1.PodResourceClaim{
+						{
+							Name:                      "hp1g",
+							ResourceClaimTemplateName: ptr.To("hugepages-1g"),
+						},
+					},
+				},
+			}
+
+			createdPod, err := pod.RunToCompletion(ctx, fxt.K8SClientset, &testPod)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdPod).ToNot(gomega.BeNil())
+
+			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			res, err := result.FromLogs(logs)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.FailedAsExpected))
+		})
+	})
+
 })
 
 func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context, cs kubernetes.Interface, nodeName, size string, amount int64) (string, string, bool) {
@@ -261,19 +442,19 @@ func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context,
 	for idx := range resourceSliceList.Items {
 		resourceSlice := &resourceSliceList.Items[idx]
 		lh.Info("checking resource slices", "name", resourceSlice.Name)
-		rdev := findHugepages2MDeviceInSlice(lh, resourceSlice)
+		rdev := findHugepagesDeviceInSlice(lh, resourceSlice, size)
 		if rdev == nil {
-			lh.Info("missing 2M hugepages in resource slice", "name", resourceSlice.Name)
+			lh.Info("missing hugepages in resource slice", "size", size, "name", resourceSlice.Name)
 			continue // go to the next slice
 		}
-		lh.Info("found 2M hugepages in resource slice", "name", resourceSlice.Name, "deviceName", rdev.Name)
+		lh.Info("found hugepages in resource slice", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
 		size, ok := rdev.Capacity[resourcev1.QualifiedName("size")]
 		if !ok {
-			lh.Info("device 2M hugepages in resource slice lacks capacity", "name", resourceSlice.Name, "deviceName", rdev.Name)
+			lh.Info("device hugepages in resource slice lacks capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
 			continue // how come?
 		}
 		if size.Value.Cmp(desiredQty) < 0 {
-			lh.Info("device 2M hugepages in resource slice has not enough capacity", "name", resourceSlice.Name, "deviceName", rdev.Name, "capacityCurrent", size.Value.String(), "capacityDesired", desiredQty.String())
+			lh.Info("device hugepages in resource slice has not enough capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name, "capacityCurrent", size.Value.String(), "capacityDesired", desiredQty.String())
 			continue
 		}
 		return resourceSlice.Name, rdev.Name, true
@@ -281,18 +462,18 @@ func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context,
 	return "", "", false
 }
 
-func findHugepages2MDeviceInSlice(lh logr.Logger, resourceSlice *resourcev1.ResourceSlice) *resourcev1.Device {
+func findHugepagesDeviceInSlice(lh logr.Logger, resourceSlice *resourcev1.ResourceSlice, size string) *resourcev1.Device {
 	for idx := range resourceSlice.Spec.Devices {
 		rdev := &resourceSlice.Spec.Devices[idx]
 		lh.Info("checking device", "resourceSlice", resourceSlice.Name, "deviceName", rdev.Name)
-		if isHugepage2MByAttributes(lh.WithValues("deviceName", rdev.Name), rdev.Attributes) {
+		if isHugepageByAttributes(lh.WithValues("deviceName", rdev.Name), rdev.Attributes, size) {
 			return rdev
 		}
 	}
 	return nil
 }
 
-func isHugepage2MByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]resourcev1.DeviceAttribute) bool {
+func isHugepageByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]resourcev1.DeviceAttribute, size string) bool {
 	lh.Info("inspecting", "attributes", attrs)
 	val, ok := attrs[resourcev1.QualifiedName("resource.kubernetes.io/hugeTLB")]
 	if !ok || val.BoolValue == nil || !*val.BoolValue {
@@ -300,7 +481,7 @@ func isHugepage2MByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName
 	}
 	lh.Info("hugeTLB enabled")
 	val, ok = attrs[resourcev1.QualifiedName("resource.kubernetes.io/pageSize")]
-	if !ok || val.StringValue == nil || *val.StringValue != "2m" {
+	if !ok || val.StringValue == nil || *val.StringValue != size {
 		return false
 	}
 	lh.Info("attribute match")

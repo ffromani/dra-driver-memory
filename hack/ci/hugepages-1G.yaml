@@ -1,0 +1,7 @@
+kind: HugePageProvision
+metadata:
+  name: ci-hugepages-1g
+spec:
+  pages:
+  - size: "1G"
+    count: 2

@@ -11,6 +11,24 @@ defaults:
     shell: bash
 
 jobs:
+  e2e-config:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup golang
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+    - name: Kind version check
+      run: kind version
+    - name: Create and setup K8S kind cluster
+      run: make ci-kind-setup
+    - name: Run E2E tests
+      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind-conf
+    - name: Show logs on failure
+      if: ${{ failure() }}
+      run: |
+        kubectl get pods -A -o wide
   e2e-memory:
     runs-on: ubuntu-latest
     steps:
@@ -48,7 +66,31 @@ jobs:
     - name: Create and setup K8S kind cluster
       run: make ci-kind-setup
     - name: Run E2E tests
-      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind-hp
+      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind-hp2m
+    - name: Show logs on failure
+      if: ${{ failure() }}
+      run: |
+        kubectl get pods -A -o wide
+  e2e-hugepages-1g:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup golang
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+    - name: Create setup
+      run: make
+    - name: Provision 1G hugepages
+      run: sudo ./bin/dramemory -hugepages-provision ./hack/ci/hugepages-1G.yaml
+    - name: Hugepages provision feedback check
+      run: ./bin/dramemory -inspect summary
+    - name: Kind version check
+      run: kind version
+    - name: Create and setup K8S kind cluster
+      run: make ci-kind-setup
+    - name: Run E2E tests
+      run: KUBECONFIG=${HOME}/.kube/config make test-e2e-kind-hp1g
     - name: Show logs on failure
       if: ${{ failure() }}
       run: |
