@@ -24,8 +24,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	resourcev1 "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -40,7 +42,7 @@ func By(format string, args ...any) {
 type Fixture struct {
 	Prefix       string
 	K8SClientset kubernetes.Interface
-	Namespace    *v1.Namespace
+	Namespace    *corev1.Namespace
 	Log          logr.Logger
 }
 
@@ -71,7 +73,7 @@ func (fxt *Fixture) Setup(ctx context.Context) error {
 	if fxt.Prefix != "" {
 		generateName += fxt.Prefix + "-"
 	}
-	ns := &v1.Namespace{
+	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: generateName,
 		},
@@ -100,6 +102,66 @@ func (fxt *Fixture) Teardown(ctx context.Context) error {
 	fxt.Log.Info("fixture teardown", "namespace", fxt.Namespace.Name)
 	fxt.Namespace = nil
 	return nil
+}
+
+func (fxt *Fixture) NodeHasMemoryResource(ctx context.Context, nodeName, size string, amount int64) (string, string, bool) {
+	lh := fxt.Log.WithValues("nodeName", nodeName)
+	resourceSliceList, err := fxt.K8SClientset.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
+	})
+	if err != nil {
+		fxt.Log.Error(err, "cannot list resourceslices", "nodeName", nodeName)
+		return "", "", false
+	}
+	lh.Info("checking resource slices", "count", len(resourceSliceList.Items))
+	desiredQty := *resource.NewQuantity(amount, resource.BinarySI)
+	for idx := range resourceSliceList.Items {
+		resourceSlice := &resourceSliceList.Items[idx]
+		lh.Info("checking resource slices", "name", resourceSlice.Name)
+		rdev := findMemoryDeviceInResourceSlice(lh, resourceSlice, size)
+		if rdev == nil {
+			lh.Info("missing device in resource slice", "size", size, "name", resourceSlice.Name)
+			continue // go to the next slice
+		}
+		lh.Info("found device in resource slice", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
+		size, ok := rdev.Capacity[resourcev1.QualifiedName("size")]
+		if !ok {
+			lh.Info("device in resource slice lacks capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
+			continue // how come?
+		}
+		if size.Value.Cmp(desiredQty) < 0 {
+			lh.Info("device in resource slice has not enough capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name, "capacityCurrent", size.Value.String(), "capacityDesired", desiredQty.String())
+			continue
+		}
+		return resourceSlice.Name, rdev.Name, true
+	}
+	return "", "", false
+}
+
+func findMemoryDeviceInResourceSlice(lh logr.Logger, resourceSlice *resourcev1.ResourceSlice, size string) *resourcev1.Device {
+	for idx := range resourceSlice.Spec.Devices {
+		rdev := &resourceSlice.Spec.Devices[idx]
+		lh.Info("checking device", "resourceSlice", resourceSlice.Name, "deviceName", rdev.Name)
+		if matchesByAttributes(lh.WithValues("deviceName", rdev.Name), rdev.Attributes, size) {
+			return rdev
+		}
+	}
+	return nil
+}
+
+func matchesByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]resourcev1.DeviceAttribute, size string) bool {
+	lh.Info("inspecting", "attributes", attrs)
+	val, ok := attrs[resourcev1.QualifiedName("resource.kubernetes.io/hugeTLB")]
+	if !ok || val.BoolValue == nil {
+		return false
+	}
+	lh.Info("hugeTLB bool present")
+	val, ok = attrs[resourcev1.QualifiedName("resource.kubernetes.io/pageSize")]
+	if !ok || val.StringValue == nil || *val.StringValue != size {
+		return false
+	}
+	lh.Info("size attribute match")
+	return true
 }
 
 func Skipf(fmts_ string, args ...any) {
