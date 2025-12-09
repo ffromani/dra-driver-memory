@@ -157,14 +157,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 
 			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.Succeeded))
 		})
 
 		ginkgo.It("should run and fail a pod which allocates exceeding the limits", ginkgo.Label("negative"), func(ctx context.Context) {
@@ -237,13 +230,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 
 			createdPod, err := pod.RunToCompletion(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.FailedAsExpected))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.FailedAsExpected))
 		})
 
 		ginkgo.It("should run successfully a pod which allocates within the limits including memory", ginkgo.Label("positive", "memory"), func(ctx context.Context) {
@@ -327,16 +314,8 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 
 			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.Succeeded))
 		})
-
 	})
 
 	ginkgo.When("requesting 1G hugepages", ginkgo.Label("hugepages:1G"), func() {
@@ -429,14 +408,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 
 			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.Succeeded))
 		})
 
 		ginkgo.It("should run and fail a pod which allocates exceeding the limits", ginkgo.Label("negative"), func(ctx context.Context) {
@@ -509,16 +481,9 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 
 			createdPod, err := pod.RunToCompletion(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.FailedAsExpected))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.FailedAsExpected))
 		})
 	})
-
 })
 
 func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context, cs kubernetes.Interface, nodeName, size string, amount int64) (string, string, bool) {
