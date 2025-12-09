@@ -245,6 +245,98 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.FailedAsExpected))
 		})
+
+		ginkgo.It("should run successfully a pod which allocates within the limits including memory", ginkgo.Label("positive", "memory"), func(ctx context.Context) {
+			fixture.By("creating a ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			claimTmpl := resourcev1.ResourceClaimTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "hugepages-32m-memory-512m", // TODO: fix the check to ensure we have as many as required
+				},
+				Spec: resourcev1.ResourceClaimTemplateSpec{
+					Spec: resourcev1.ResourceClaimSpec{
+						Devices: resourcev1.DeviceClaim{
+							Requests: []resourcev1.DeviceRequest{
+								{
+									Name: "hp2m",
+									Exactly: &resourcev1.ExactDeviceRequest{
+										DeviceClassName: "dra.hugepages-2m",
+										Capacity: &resourcev1.CapacityRequirements{
+											Requests: map[resourcev1.QualifiedName]resource.Quantity{
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(32*(1<<20), resource.BinarySI),
+											},
+										},
+									},
+								},
+								{
+									Name: "mem",
+									Exactly: &resourcev1.ExactDeviceRequest{
+										DeviceClassName: "dra.memory",
+										Capacity: &resourcev1.CapacityRequirements{
+											Requests: map[resourcev1.QualifiedName]resource.Quantity{
+												resourcev1.QualifiedName("size"): *resource.NewQuantity(512*(1<<20), resource.BinarySI),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			createdTmpl, err := fxt.K8SClientset.ResourceV1().ResourceClaimTemplates(fxt.Namespace.Name).Create(ctx, &claimTmpl, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdTmpl).ToNot(gomega.BeNil())
+
+			fixture.By("creating a pod consuming the ResourceClaimTemplate on %q", fxt.Namespace.Name)
+			testPod := corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: fxt.Namespace.Name,
+					Name:      "pod-with-hugepages-2m",
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyNever,
+					Containers: []corev1.Container{
+						{
+							Name:    "container-with-hugepages-2m",
+							Image:   dramemoryTesterImage,
+							Command: []string{"/bin/dramemtester"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=32m", "-numa-align=single", "-run-forever"},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+									corev1.ResourceMemory: *resource.NewQuantity(512*(1<<20), resource.BinarySI),
+								},
+								Claims: []corev1.ResourceClaim{
+									{
+										Name: "hpmem",
+									},
+								},
+							},
+						},
+					},
+					ResourceClaims: []corev1.PodResourceClaim{
+						{
+							Name:                      "hpmem",
+							ResourceClaimTemplateName: ptr.To("hugepages-32m-memory-512m"),
+						},
+					},
+				},
+			}
+
+			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(createdPod).ToNot(gomega.BeNil())
+
+			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			res, err := result.FromLogs(logs)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
+			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+		})
+
 	})
 
 	ginkgo.When("requesting 1G hugepages", ginkgo.Label("hugepages:1G"), func() {
