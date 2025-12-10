@@ -18,10 +18,8 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
@@ -29,7 +27,6 @@ import (
 	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 
 	"github.com/ffromani/dra-driver-memory/test/pkg/fixture"
@@ -76,7 +73,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			fxt = rootFxt.WithPrefix("allochp")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
 
-			rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(fxt.Log, ctx, fxt.K8SClientset, targetNode.Name, "2m", 32*(1<<20))
+			rsName, devName, ok := fxt.NodeHasMemoryResource(ctx, targetNode.Name, "2m", 32*(1<<20))
 			if !ok {
 				ginkgo.Skip("missing hugepages in resource slices")
 			}
@@ -327,7 +324,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			fxt = rootFxt.WithPrefix("allochp")
 			gomega.Expect(fxt.Setup(ctx)).To(gomega.Succeed())
 
-			rsName, devName, ok := findFirstHugepageDeviceInResourceSlice(fxt.Log, ctx, fxt.K8SClientset, targetNode.Name, "1g", 2*(1<<30))
+			rsName, devName, ok := fxt.NodeHasMemoryResource(ctx, targetNode.Name, "1g", 2*(1<<30))
 			if !ok {
 				ginkgo.Skip("missing hugepages in resource slices")
 			}
@@ -485,62 +482,3 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 		})
 	})
 })
-
-func findFirstHugepageDeviceInResourceSlice(lh logr.Logger, ctx context.Context, cs kubernetes.Interface, nodeName, size string, amount int64) (string, string, bool) {
-	resourceSliceList, err := cs.ResourceV1().ResourceSlices().List(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
-	})
-	if err != nil {
-		lh.Error(err, "cannot list resourceslices", "nodeName", nodeName)
-		return "", "", false
-	}
-	lh.Info("checking resource slices", "count", len(resourceSliceList.Items))
-	desiredQty := *resource.NewQuantity(amount, resource.BinarySI)
-	for idx := range resourceSliceList.Items {
-		resourceSlice := &resourceSliceList.Items[idx]
-		lh.Info("checking resource slices", "name", resourceSlice.Name)
-		rdev := findHugepagesDeviceInSlice(lh, resourceSlice, size)
-		if rdev == nil {
-			lh.Info("missing hugepages in resource slice", "size", size, "name", resourceSlice.Name)
-			continue // go to the next slice
-		}
-		lh.Info("found hugepages in resource slice", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
-		size, ok := rdev.Capacity[resourcev1.QualifiedName("size")]
-		if !ok {
-			lh.Info("device hugepages in resource slice lacks capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name)
-			continue // how come?
-		}
-		if size.Value.Cmp(desiredQty) < 0 {
-			lh.Info("device hugepages in resource slice has not enough capacity", "size", size, "name", resourceSlice.Name, "deviceName", rdev.Name, "capacityCurrent", size.Value.String(), "capacityDesired", desiredQty.String())
-			continue
-		}
-		return resourceSlice.Name, rdev.Name, true
-	}
-	return "", "", false
-}
-
-func findHugepagesDeviceInSlice(lh logr.Logger, resourceSlice *resourcev1.ResourceSlice, size string) *resourcev1.Device {
-	for idx := range resourceSlice.Spec.Devices {
-		rdev := &resourceSlice.Spec.Devices[idx]
-		lh.Info("checking device", "resourceSlice", resourceSlice.Name, "deviceName", rdev.Name)
-		if isHugepageByAttributes(lh.WithValues("deviceName", rdev.Name), rdev.Attributes, size) {
-			return rdev
-		}
-	}
-	return nil
-}
-
-func isHugepageByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]resourcev1.DeviceAttribute, size string) bool {
-	lh.Info("inspecting", "attributes", attrs)
-	val, ok := attrs[resourcev1.QualifiedName("resource.kubernetes.io/hugeTLB")]
-	if !ok || val.BoolValue == nil || !*val.BoolValue {
-		return false
-	}
-	lh.Info("hugeTLB enabled")
-	val, ok = attrs[resourcev1.QualifiedName("resource.kubernetes.io/pageSize")]
-	if !ok || val.StringValue == nil || *val.StringValue != size {
-		return false
-	}
-	lh.Info("attribute match")
-	return true
-}
