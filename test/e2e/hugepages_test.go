@@ -149,7 +149,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "hp2m",
-							ResourceClaimTemplateName: ptr.To("hugepages-32m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -222,7 +222,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "hp2m",
-							ResourceClaimTemplateName: ptr.To("hugepages-32m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -306,7 +306,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "hpmem",
-							ResourceClaimTemplateName: ptr.To("hugepages-32m-memory-512m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -400,7 +400,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "hp1g",
-							ResourceClaimTemplateName: ptr.To("hugepages-1g"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -473,7 +473,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "hp1g",
-							ResourceClaimTemplateName: ptr.To("hugepages-1g"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},

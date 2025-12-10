@@ -140,7 +140,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-512m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -214,7 +214,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-512m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
