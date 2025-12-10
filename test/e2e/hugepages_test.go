@@ -92,7 +92,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as required
+					Name:      "hugepages-32m",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -165,7 +165,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-32m", // TODO: fix the check to ensure we have as many as required
+					Name:      "hugepages-32m",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -238,7 +238,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-32m-memory-512m", // TODO: fix the check to ensure we have as many as required
+					Name:      "hugepages-32m-memory-512m",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -343,7 +343,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-1g", // TODO: fix the check to ensure we have as many as required
+					Name:      "hugepages-1g",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
@@ -416,7 +416,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 			claimTmpl := resourcev1.ResourceClaimTemplate{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: fxt.Namespace.Name,
-					Name:      "hugepages-1g", // TODO: fix the check to ensure we have as many as required
+					Name:      "hugepages-1g",
 				},
 				Spec: resourcev1.ResourceClaimTemplateSpec{
 					Spec: resourcev1.ResourceClaimSpec{
