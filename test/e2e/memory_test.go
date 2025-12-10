@@ -140,7 +140,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-512m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -149,13 +149,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 			createdPod, err := pod.CreateSync(ctx, fxt.K8SClientset, &testPod)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			gomega.Expect(createdPod).ToNot(gomega.BeNil())
-
-			logs, err := pod.GetLogs(fxt.K8SClientset, ctx, createdPod.Namespace, createdPod.Name, createdPod.Spec.Containers[0].Name)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			res, err := result.FromLogs(logs)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			fxt.Log.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
-			gomega.Expect(res.Status.Reason).To(gomega.Equal(result.Succeeded))
+			gomega.Expect(createdPod).To(ReportReason(fxt, result.Succeeded))
 		})
 
 		ginkgo.It("should run and fail a pod which allocates exceeding the limits", ginkgo.Label("negative"), func(ctx context.Context) {
@@ -220,7 +214,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					ResourceClaims: []corev1.PodResourceClaim{
 						{
 							Name:                      "mem",
-							ResourceClaimTemplateName: ptr.To("memory-512m"),
+							ResourceClaimTemplateName: ptr.To(createdTmpl.Name),
 						},
 					},
 				},
@@ -235,7 +229,7 @@ var _ = ginkgo.Describe("Memory Allocation", ginkgo.Serial, ginkgo.Ordered, gink
 					return nil
 				}
 				return pod
-			}).WithTimeout(time.Minute).WithPolling(2 * time.Second).Should(BeOOMKilled(fxt.Log))
+			}).WithTimeout(time.Minute).WithPolling(2 * time.Second).Should(BeOOMKilled(fxt))
 		})
 	})
 })
