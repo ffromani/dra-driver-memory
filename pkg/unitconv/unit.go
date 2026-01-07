@@ -70,7 +70,10 @@ func Minimize(unitName string) string {
 	if unitName == "" {
 		return ""
 	}
-	return strings.ToLower(string(unitName[0]))
+	if unitName == "B" {
+		return unitName
+	}
+	return strings.TrimSuffix(unitName, "B")
 }
 
 func SizeInBytesToMinimizedString(sizeInBytes uint64) string {
@@ -82,27 +85,26 @@ func MinimizedStringToSizeInBytes(sz string) (uint64, error) {
 	if len(sz) < 2 {
 		return 0, errors.New("malformed string: too small")
 	}
-	// NOTE: need to be a lowercase RFC 1123 label
-	mults := map[byte]uint64{
-		byte('b'): 1 << 0,
-		byte('k'): 1 << 10,
-		byte('m'): 1 << 20,
-		byte('g'): 1 << 30,
-		byte('t'): 1 << 40,
-		byte('p'): 1 << 50,
-		byte('e'): 1 << 60,
+	mults := map[string]uint64{
+		"B":  1 << 0,
+		"Ki": 1 << 10,
+		"Mi": 1 << 20,
+		"Gi": 1 << 30,
+		"Ti": 1 << 40,
+		"Pi": 1 << 50,
+		"Ei": 1 << 60,
 	}
-	unit := sz[len(sz)-1]
-	rval := sz[:len(sz)-1]
-	value, err := strconv.ParseUint(rval, 10, 64)
-	if err != nil {
-		return 0, err
+	for unit, mulp := range mults {
+		if strings.HasSuffix(sz, unit) {
+			rval := strings.TrimSuffix(sz, unit)
+			value, err := strconv.ParseUint(rval, 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return value * mulp, nil
+		}
 	}
-	mulp, ok := mults[unit]
-	if !ok {
-		return 0, fmt.Errorf("unsupported unit: %q", unit)
-	}
-	return value * mulp, nil
+	return 0, fmt.Errorf("unsupported unit: %q", sz)
 }
 
 func SizeInBytesToCGroupString(sizeInBytes uint64) string {

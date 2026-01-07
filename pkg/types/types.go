@@ -38,7 +38,7 @@ type ResourceIdent struct {
 	Pagesize uint64 //bytes
 }
 
-// name is in the form `memory-4k` or `hugepages-1g`
+// name is in the form `memory-4Ki` or `hugepages-1Gi`
 func ResourceIdentFromName(name string) (ResourceIdent, error) {
 	parts := strings.SplitN(name, "-", 2)
 	if len(parts) != 2 {

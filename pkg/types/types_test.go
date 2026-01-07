@@ -33,7 +33,7 @@ func TestResourceIdentNameRoundTrip(t *testing.T) {
 
 	testcases := []testcase{
 		{
-			fullName: "memory-4k",
+			fullName: "memory-4Ki",
 			name:     "memory",
 			ident: ResourceIdent{
 				Kind:     Memory,
@@ -41,8 +41,8 @@ func TestResourceIdentNameRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			fullName: "hugepages-2m",
-			name:     "hugepages-2m",
+			fullName: "hugepages-2Mi",
+			name:     "hugepages-2Mi",
 			hugeTLB:  true,
 			ident: ResourceIdent{
 				Kind:     Hugepages,
@@ -50,8 +50,8 @@ func TestResourceIdentNameRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			fullName: "hugepages-1g",
-			name:     "hugepages-1g",
+			fullName: "hugepages-1Gi",
+			name:     "hugepages-1Gi",
 			hugeTLB:  true,
 			ident: ResourceIdent{
 				Kind:     Hugepages,
@@ -80,21 +80,21 @@ func TestResourceIdentCapacityName(t *testing.T) {
 
 	testcases := []testcase{
 		{
-			fullName: "memory-4k",
+			fullName: "memory-4Ki",
 			ident: ResourceIdent{
 				Kind:     Memory,
 				Pagesize: 4 * 1024,
 			},
 		},
 		{
-			fullName: "hugepages-2m",
+			fullName: "hugepages-2Mi",
 			ident: ResourceIdent{
 				Kind:     Hugepages,
 				Pagesize: 2 * 1024 * 1024,
 			},
 		},
 		{
-			fullName: "hugepages-1g",
+			fullName: "hugepages-1Gi",
 			ident: ResourceIdent{
 				Kind:     Hugepages,
 				Pagesize: 1024 * 1024 * 1024,
@@ -118,21 +118,21 @@ func TestResourceIdentMinimumAllocatable(t *testing.T) {
 
 	testcases := []testcase{
 		{
-			fullName: "memory-4k",
+			fullName: "memory-4Ki",
 			ident: ResourceIdent{
 				Kind:     Memory,
 				Pagesize: 4 * 1024,
 			},
 		},
 		{
-			fullName: "hugepages-2m",
+			fullName: "hugepages-2Mi",
 			ident: ResourceIdent{
 				Kind:     Hugepages,
 				Pagesize: 2 * 1024 * 1024,
 			},
 		},
 		{
-			fullName: "hugepages-1g",
+			fullName: "hugepages-1Gi",
 			ident: ResourceIdent{
 				Kind:     Hugepages,
 				Pagesize: 1024 * 1024 * 1024,
