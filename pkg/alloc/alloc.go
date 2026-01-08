@@ -67,7 +67,7 @@ func (mgr *Manager) GetClaim(claimUID k8stypes.UID) (map[string]types.Allocation
 func (mgr *Manager) BindClaimToPod(lh logr.Logger, podId string, claimUID k8stypes.UID) {
 	claimUIDs, ok := mgr.claimsByPodId[podId]
 	if !ok {
-		lh.V(4).Info("claim bound", "pod", podId, "claim", claimUID)
+		lh.V(4).Info("claim bound", "podSandboxID", podId, "claimUID", claimUID)
 		mgr.claimsByPodId[podId] = sets.New(claimUID)
 		return
 	}
@@ -76,7 +76,7 @@ func (mgr *Manager) BindClaimToPod(lh logr.Logger, podId string, claimUID k8styp
 	}
 	claimUIDs.Insert(claimUID)
 	mgr.claimsByPodId[podId] = claimUIDs
-	lh.V(4).Info("claim bound", "pod", podId, "claim", claimUID)
+	lh.V(4).Info("claim bound", "podSandboxID", podId, "claimUID", claimUID)
 }
 
 func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podId string) {
@@ -84,7 +84,7 @@ func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podId string) {
 	if !ok {
 		return
 	}
-	lh.V(4).Info("unbinding claims", "pod", podId, "claims", claimUIDs.Len())
+	lh.V(4).Info("unbinding claims", "podSandboxID", podId, "claimsCount", claimUIDs.Len())
 	for _, claimUID := range claimUIDs.UnsortedList() {
 		mgr.UnregisterClaim(claimUID)
 	}

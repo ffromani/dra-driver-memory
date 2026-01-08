@@ -58,18 +58,18 @@ type KubeletPlugin interface {
 }
 
 type MemoryDriver struct {
-	driverName   string
-	nodeName     string
-	cgMount      string
-	logger       logr.Logger
-	kubeClient   kubernetes.Interface
-	draPlugin    KubeletPlugin
-	nriPlugin    stub.Stub
-	cdiMgr       *cdi.Manager
-	allocMgr     *alloc.Manager
-	discoverer   *sysinfo.Discoverer
-	hpRootLimits []hugepages.Limit
-	cgPathByPOD  map[string]string // podUID -> cgroupParent
+	driverName     string
+	nodeName       string
+	cgMount        string
+	logger         logr.Logger
+	kubeClient     kubernetes.Interface
+	draPlugin      KubeletPlugin
+	nriPlugin      stub.Stub
+	cdiMgr         *cdi.Manager
+	allocMgr       *alloc.Manager
+	discoverer     *sysinfo.Discoverer
+	hpRootLimits   []hugepages.Limit
+	cgPathByPodUID map[string]string // podUID -> cgroupParent
 }
 
 type SysinfoVerifier interface {
@@ -98,14 +98,14 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 	}
 
 	mdrv := &MemoryDriver{
-		driverName:  env.DriverName,
-		nodeName:    env.NodeName,
-		cgMount:     env.CgroupMount,
-		kubeClient:  env.Clientset,
-		logger:      env.Logger.WithName(env.DriverName),
-		allocMgr:    alloc.NewManager(),
-		discoverer:  sysinfo.NewDiscoverer(env.SysRoot),
-		cgPathByPOD: make(map[string]string),
+		driverName:     env.DriverName,
+		nodeName:       env.NodeName,
+		cgMount:        env.CgroupMount,
+		kubeClient:     env.Clientset,
+		logger:         env.Logger.WithName(env.DriverName),
+		allocMgr:       alloc.NewManager(),
+		discoverer:     sysinfo.NewDiscoverer(env.SysRoot),
+		cgPathByPodUID: make(map[string]string),
 	}
 
 	err = mdrv.gatherHugepages(env.Logger)

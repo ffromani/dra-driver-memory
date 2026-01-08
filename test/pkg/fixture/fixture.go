@@ -35,10 +35,6 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/client"
 )
 
-func By(format string, args ...any) {
-	ginkgo.By(fmt.Sprintf(format, args...))
-}
-
 type Fixture struct {
 	Prefix       string
 	K8SClientset kubernetes.Interface
@@ -67,7 +63,7 @@ func (fxt *Fixture) WithPrefix(prefix string) *Fixture {
 
 func (fxt *Fixture) Setup(ctx context.Context) error {
 	if fxt.Namespace != nil {
-		return nil // TODO: or fail?
+		Fail("Setup called, but namespace object already exists: %q", fxt.Namespace.Name)
 	}
 	generateName := "dramem-e2e-"
 	if fxt.Prefix != "" {
@@ -89,7 +85,7 @@ func (fxt *Fixture) Setup(ctx context.Context) error {
 
 func (fxt *Fixture) Teardown(ctx context.Context) error {
 	if fxt.Namespace == nil {
-		return nil // TODO: or fail?
+		Fail("Teardown called, but namespace object is nil")
 	}
 	err := fxt.K8SClientset.CoreV1().Namespaces().Delete(ctx, fxt.Namespace.Name, metav1.DeleteOptions{})
 	if err != nil {
@@ -164,8 +160,16 @@ func matchesByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]reso
 	return true
 }
 
-func Skipf(fmts_ string, args ...any) {
+func By(fmts_ string, args ...any) {
+	ginkgo.By(fmt.Sprintf(fmts_, args...))
+}
+
+func Skip(fmts_ string, args ...any) {
 	ginkgo.Skip(fmt.Sprintf(fmts_, args...))
+}
+
+func Fail(fmts_ string, args ...any) {
+	ginkgo.Fail(fmt.Sprintf(fmts_, args...))
 }
 
 const (
