@@ -25,6 +25,7 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/cpuset"
 
 	"github.com/ffromani/dra-driver-memory/pkg/env"
@@ -38,12 +39,42 @@ import (
 
 func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbox, containers []*api.Container) ([]*api.ContainerUpdate, error) {
 	lh := mdrv.logrFromContext(ctx)
-	lh = lh.WithName("Synchronize").WithValues("podCount", len(pods), "containerCount", len(containers))
+	lh = lh.WithName("Synchronize")
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	// TODO: restore the internal state
-	return nil, nil
+	// we start from empty state, so we can just be additive
+	// we recover in reverse (container, then sandbox) because we have a easy way
+	// to detect the containers which we processed, so from these we can find the
+	// relevant sandboxes
+	podSandboxIDs := sets.New[string]()
+
+	for _, ctr := range containers {
+		lh_ := lh.WithValues("podSandboxID", ctr.PodSandboxId, "container", ctr.Name, "containerID", ctr.Id)
+		_, _, ok, err := mdrv.handleContainer(lh_, ctr)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		lh_.V(4).Info("backreferencing")
+		podSandboxIDs.Insert(ctr.PodSandboxId)
+	}
+
+	for _, pod := range pods {
+		lh_ := lh.WithValues("podSandboxID", pod.Id, "podUID", pod.Uid, "pod", pod.Namespace+"/"+pod.Name)
+		if !podSandboxIDs.Has(pod.Id) {
+			continue
+		}
+		lh_.V(4).Info("backreferenced pod")
+		err := mdrv.handlePodSandbox(lh_, pod)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return []*api.ContainerUpdate{}, nil
 }
 
 func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
@@ -52,30 +83,15 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	adjust := &api.ContainerAdjustment{}
-	var updates []*api.ContainerUpdate
-
-	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.discoverer.AllResourceNames())
+	lh.V(4).Info("container backref", "sandboxID", ctr.PodSandboxId)
+	numaNodes, allocs, ok, err := mdrv.handleContainer(lh, ctr)
 	if err != nil {
-		lh.Error(err, "parsing DRA env for container")
+		return nil, nil, err
 	}
-
-	if len(nodesByClaim) == 0 {
+	var updates []*api.ContainerUpdate
+	if !ok {
 		lh.V(4).Info("No memory pinning for container")
-		return adjust, updates, nil
-	}
-
-	lh.V(4).Info("extracted", "nodesByClaim", len(nodesByClaim), "allocsByClaim", len(allocsByClaim))
-
-	var numaNodes cpuset.CPUSet
-	for claimUID, claimNUMANodes := range nodesByClaim {
-		numaNodes = numaNodes.Union(claimNUMANodes)
-		mdrv.allocMgr.BindClaimToPod(lh, pod.Id, claimUID)
-	}
-	var allocs []types.Allocation
-	for claimUID, alloc := range allocsByClaim {
-		allocs = append(allocs, alloc)
-		mdrv.allocMgr.BindClaimToPod(lh, pod.Id, claimUID)
+		return &api.ContainerAdjustment{}, updates, nil
 	}
 
 	machineData := mdrv.discoverer.GetCachedMachineData()
@@ -86,6 +102,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 		_ = mdrv.updatePodLimits(lh, machineData, cgroupParent, hpLimits)
 	}
 
+	adjust := &api.ContainerAdjustment{}
 	adjust.SetLinuxCPUSetMems(numaNodes.String())
 	for _, hpLimit := range hpLimits {
 		adjust.AddLinuxHugepageLimit(hpLimit.PageSize, hpLimit.Limit.Value) // MUST be set
@@ -141,9 +158,7 @@ func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
-	lh.V(2).Info("deferring pod limits settings", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
-	return nil
+	return mdrv.handlePodSandbox(lh, pod)
 }
 
 func (mdrv *MemoryDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
@@ -163,6 +178,38 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	defer lh.V(4).Info("done")
 
 	mdrv.allocMgr.UnregisterClaimsForPod(lh, pod.Id)
+	return nil
+}
+
+func (mdrv *MemoryDriver) handleContainer(lh logr.Logger, ctr *api.Container) (cpuset.CPUSet, []types.Allocation, bool, error) {
+	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.discoverer.AllResourceNames())
+	if err != nil {
+		return cpuset.CPUSet{}, nil, false, err
+	}
+
+	if len(nodesByClaim) == 0 {
+		return cpuset.CPUSet{}, nil, false, nil
+	}
+
+	lh.V(4).Info("extracted", "nodesByClaim", len(nodesByClaim), "allocsByClaim", len(allocsByClaim))
+
+	var numaNodes cpuset.CPUSet
+	for claimUID, claimNUMANodes := range nodesByClaim {
+		numaNodes = numaNodes.Union(claimNUMANodes)
+		mdrv.allocMgr.BindClaimToPod(lh, ctr.PodSandboxId, claimUID)
+	}
+	var allocs []types.Allocation
+	for claimUID, alloc := range allocsByClaim {
+		allocs = append(allocs, alloc)
+		mdrv.allocMgr.BindClaimToPod(lh, ctr.PodSandboxId, claimUID)
+	}
+
+	return numaNodes, allocs, true, nil
+}
+
+func (mdrv *MemoryDriver) handlePodSandbox(lh logr.Logger, pod *api.PodSandbox) error {
+	mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
+	lh.V(2).Info("registered pod cgroupParent", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
 	return nil
 }
 
