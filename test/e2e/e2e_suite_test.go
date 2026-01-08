@@ -69,7 +69,7 @@ func SkipIfGithubActions() {
 	if !isGHA {
 		return
 	}
-	fixture.Skipf("Github Actions detected: skip flaky/fragile tests")
+	fixture.Skip("Github Actions detected: skip flaky/fragile tests")
 }
 
 func ReportReason(fxt *fixture.Fixture, reason result.Reason) types.GomegaMatcher {

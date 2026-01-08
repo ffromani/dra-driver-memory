@@ -35,10 +35,6 @@ import (
 	"github.com/ffromani/dra-driver-memory/test/pkg/client"
 )
 
-func By(format string, args ...any) {
-	ginkgo.By(fmt.Sprintf(format, args...))
-}
-
 type Fixture struct {
 	Prefix       string
 	K8SClientset kubernetes.Interface
@@ -164,7 +160,11 @@ func matchesByAttributes(lh logr.Logger, attrs map[resourcev1.QualifiedName]reso
 	return true
 }
 
-func Skipf(fmts_ string, args ...any) {
+func By(fmts_ string, args ...any) {
+	ginkgo.By(fmt.Sprintf(fmts_, args...))
+}
+
+func Skip(fmts_ string, args ...any) {
 	ginkgo.Skip(fmt.Sprintf(fmts_, args...))
 }
 
