@@ -96,6 +96,9 @@ spec:
         k8s-app: dramemory
         build: devel
     spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-node-critical
       hostNetwork: true
       tolerations:
         - operator: Exists
