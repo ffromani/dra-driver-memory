@@ -48,7 +48,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(0))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("2m")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("2Mi")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(true)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(0))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(0))},
@@ -65,7 +65,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(3))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("2m")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("2Mi")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(true)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(3))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(3))},
@@ -82,7 +82,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(0))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("1g")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("1Gi")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(true)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(0))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(0))},
@@ -99,7 +99,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(3))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("1g")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("1Gi")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(true)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(3))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(3))},
@@ -116,7 +116,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(0))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("4k")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("4Ki")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(false)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(0))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(0))},
@@ -133,7 +133,7 @@ func TestMakeAttributes(t *testing.T) {
 			},
 			expected: map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
 				StandardDeviceAttributePrefix + "numaNode": {IntValue: ptr.To(int64(2))},
-				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("4k")},
+				StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To("4Ki")},
 				StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(false)},
 				"dra.cpu/numaNode":                         {IntValue: ptr.To(int64(2))},
 				"dra.net/numaNode":                         {IntValue: ptr.To(int64(2))},

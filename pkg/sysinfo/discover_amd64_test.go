@@ -20,6 +20,7 @@ package sysinfo
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -41,7 +42,6 @@ func TestRefreshWithData(t *testing.T) {
 	type testcase struct {
 		name             string
 		machine          MachineData
-		makeDeviceName   func(string) string
 		expectedResNames []string
 		expectedSlices   []resourceslice.Slice
 	}
@@ -67,9 +67,6 @@ func TestRefreshWithData(t *testing.T) {
 					},
 				},
 			},
-			makeDeviceName: func(devName string) string {
-				return devName + "-XXXXXX"
-			},
 			expectedResNames: []string{"memory"},
 			expectedSlices: []resourceslice.Slice{
 				{
@@ -78,7 +75,7 @@ func TestRefreshWithData(t *testing.T) {
 							Name: "memory-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "4k",
+								sizeName: "4Ki",
 								hugeTLB:  false,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
@@ -128,18 +125,15 @@ func TestRefreshWithData(t *testing.T) {
 					},
 				},
 			},
-			makeDeviceName: func(devName string) string {
-				return devName + "-XXXXXX"
-			},
-			expectedResNames: []string{"hugepages-1g", "hugepages-2m", "memory"},
+			expectedResNames: []string{"hugepages-1Gi", "hugepages-2Mi", "memory"},
 			expectedSlices: []resourceslice.Slice{
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name: "hugepages-1g-XXXXXX",
+							Name: "hugepages-1gi-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "1g",
+								sizeName: "1Gi",
 								hugeTLB:  true,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
@@ -162,10 +156,10 @@ func TestRefreshWithData(t *testing.T) {
 				{
 					Devices: []resourceapi.Device{
 						{
-							Name: "hugepages-2m-XXXXXX",
+							Name: "hugepages-2mi-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "2m",
+								sizeName: "2Mi",
 								hugeTLB:  true,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
@@ -191,7 +185,7 @@ func TestRefreshWithData(t *testing.T) {
 							Name: "memory-XXXXXX",
 							Attributes: makeAttributes(attrInfo{
 								numaNode: 0,
-								sizeName: "4k",
+								sizeName: "4Ki",
 								hugeTLB:  false,
 							}),
 							Capacity: map[resourceapi.QualifiedName]resourceapi.DeviceCapacity{
@@ -223,7 +217,7 @@ func TestRefreshWithData(t *testing.T) {
 			t.Cleanup(func() {
 				MakeDeviceName = saveMakeDeviceName
 			})
-			MakeDeviceName = tcase.makeDeviceName
+			MakeDeviceName = makeTestDeviceName
 
 			logger := testr.New(t)
 
@@ -300,11 +294,10 @@ func TestGetSpanForDeviceNotFound(t *testing.T) {
 
 func TestGetSpanForDevice(t *testing.T) {
 	type testcase struct {
-		name           string
-		machine        MachineData
-		makeDeviceName func(string) string
-		devName        string
-		expected       types.Span
+		name     string
+		machine  MachineData
+		devName  string
+		expected types.Span
 	}
 
 	testcases := []testcase{
@@ -328,9 +321,6 @@ func TestGetSpanForDevice(t *testing.T) {
 					},
 				},
 			},
-			makeDeviceName: func(devName string) string {
-				return devName + "-XXXXXX"
-			},
 			devName: "memory-XXXXXX",
 			expected: types.Span{
 				ResourceIdent: types.ResourceIdent{
@@ -351,7 +341,7 @@ func TestGetSpanForDevice(t *testing.T) {
 			t.Cleanup(func() {
 				MakeDeviceName = saveMakeDeviceName
 			})
-			MakeDeviceName = tcase.makeDeviceName
+			MakeDeviceName = makeTestDeviceName
 
 			logger := testr.New(t)
 
@@ -386,4 +376,8 @@ func makeAttributes(info attrInfo) map[resourceapi.QualifiedName]resourceapi.Dev
 		"dra.cpu/numaNode":                {IntValue: pNode},
 		"dra.net/numaNode":                {IntValue: pNode},
 	}
+}
+
+func makeTestDeviceName(devName string) string {
+	return strings.ToLower(devName) + "-XXXXXX"
 }

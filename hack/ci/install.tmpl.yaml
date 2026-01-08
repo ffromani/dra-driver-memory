@@ -169,7 +169,7 @@ spec:
   selectors:
   - cel:
       expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
-        == "4k" && device.attributes["resource.kubernetes.io"].hugeTLB == false
+        == "4Ki" && device.attributes["resource.kubernetes.io"].hugeTLB == false
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -179,7 +179,7 @@ spec:
   selectors:
   - cel:
       expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
-        == "2m" && device.attributes["resource.kubernetes.io"].hugeTLB == true
+        == "2Mi" && device.attributes["resource.kubernetes.io"].hugeTLB == true
 ---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
@@ -189,4 +189,4 @@ spec:
   selectors:
   - cel:
       expression: device.driver == "dra.memory" && device.attributes["resource.kubernetes.io"].pageSize
-        == "1g" && device.attributes["resource.kubernetes.io"].hugeTLB == true
+        == "1Gi" && device.attributes["resource.kubernetes.io"].hugeTLB == true

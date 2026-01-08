@@ -33,23 +33,23 @@ func TestSizeToStringRoundTrip(t *testing.T) {
 	testcases := []testcase{
 		// good cases, add them at the bottom of the section
 		{
-			sval: "7b",
+			sval: "7B",
 			uval: 7,
 		},
 		{
-			sval: "4k",
+			sval: "4Ki",
 			uval: 4 * 1024,
 		},
 		{
-			sval: "64k",
+			sval: "64Ki",
 			uval: 64 * 1024,
 		},
 		{
-			sval: "2m",
+			sval: "2Mi",
 			uval: 2 * 1024 * 1024,
 		},
 		{
-			sval: "1g",
+			sval: "1Gi",
 			uval: 1024 * 1024 * 1024,
 		},
 		// bad cases, add them at the bottom of the section
@@ -75,6 +75,10 @@ func TestSizeToStringRoundTrip(t *testing.T) {
 		},
 		{
 			sval: "1pb",
+			fail: true,
+		},
+		{
+			sval: "1gi",
 			fail: true,
 		},
 	}
@@ -181,19 +185,19 @@ func TestMinimize(t *testing.T) {
 		},
 		{
 			input:    "B",
-			expected: "b",
+			expected: "B",
 		},
 		{
 			input:    "KiB",
-			expected: "k",
+			expected: "Ki",
 		},
 		{
 			input:    "MiB",
-			expected: "m",
+			expected: "Mi",
 		},
 		{
 			input:    "GiB",
-			expected: "g",
+			expected: "Gi",
 		},
 	}
 

@@ -132,7 +132,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 							Name:    "container-with-hugepages-2m",
 							Image:   dramemoryTesterImage,
 							Command: []string{"/bin/dramemtester"},
-							Args:    []string{"-use-hugetlb=true", "-alloc-size=32m", "-numa-align=single", "-run-forever"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=32Mi", "-numa-align=single", "-run-forever"},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
@@ -212,7 +212,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 							Name:    "container-over-hugepages-2m",
 							Image:   dramemoryTesterImage,
 							Command: []string{"/bin/dramemtester"},
-							Args:    []string{"-use-hugetlb=true", "-alloc-size=48m", "-should-fail"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=48Mi", "-should-fail"},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
@@ -312,7 +312,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 							Name:    "container-with-hugepages-1g",
 							Image:   dramemoryTesterImage,
 							Command: []string{"/bin/dramemtester"},
-							Args:    []string{"-use-hugetlb=true", "-alloc-size=1g", "-numa-align=single", "-run-forever"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=1Gi", "-numa-align=single", "-run-forever"},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
@@ -392,7 +392,7 @@ var _ = ginkgo.Describe("Hugepages Allocation", ginkgo.Serial, ginkgo.Ordered, g
 							Name:    "container-over-hugepages-1g",
 							Image:   dramemoryTesterImage,
 							Command: []string{"/bin/dramemtester"},
-							Args:    []string{"-use-hugetlb=true", "-alloc-size=2g", "-should-fail"},
+							Args:    []string{"-use-hugetlb=true", "-alloc-size=2Gi", "-should-fail"},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),

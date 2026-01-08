@@ -17,6 +17,8 @@
 package sysinfo
 
 import (
+	"strings"
+
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8srand "k8s.io/apimachinery/pkg/util/rand"
@@ -85,5 +87,5 @@ func ToDevice(sp types.Span) resourceapi.Device {
 // Since users are expected to select memory devices by attribute and not by name, we just use a
 // random suffix for the time being and move on.
 var MakeDeviceName = func(devName string) string {
-	return devName + "-" + k8srand.String(6)
+	return strings.ToLower(devName) + "-" + k8srand.String(6)
 }
