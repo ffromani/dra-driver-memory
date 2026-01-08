@@ -96,9 +96,9 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 
 	machineData := mdrv.discoverer.GetCachedMachineData()
 	hpLimits := hugepages.LimitsFromAllocations(lh, machineData, allocs)
-	cgroupParent := mdrv.cgPathByPOD[pod.Uid]
+	cgroupParent := mdrv.cgPathByPodUID[pod.Uid]
 	if cgroupParent != "" {
-		lh.V(2).Info("setting deferred pod cgroup limit", "podUID", pod.Uid, "cgroupParent", cgroupParent)
+		lh.V(2).Info("setting deferred pod cgroup limit", "cgroupParent", cgroupParent)
 		_ = mdrv.updatePodLimits(lh, machineData, cgroupParent, hpLimits)
 	}
 
@@ -115,7 +115,7 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 
 func (mdrv *MemoryDriver) UpdatePodSandbox(ctx context.Context, pod *api.PodSandbox, over *api.LinuxResources, res *api.LinuxResources) error {
 	lh := mdrv.logrFromContext(ctx)
-	lh = lh.WithName("UpdatePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh = lh.WithName("UpdatePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "podSandboxID", pod.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
@@ -154,7 +154,7 @@ func (mdrv *MemoryDriver) RemoveContainer(ctx context.Context, pod *api.PodSandb
 
 func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
-	lh = lh.WithName("RunPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh = lh.WithName("RunPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "podSandboxID", pod.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
@@ -163,17 +163,17 @@ func (mdrv *MemoryDriver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox
 
 func (mdrv *MemoryDriver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
-	lh = lh.WithName("StopPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh = lh.WithName("StopPodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "podSandboxID", pod.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	delete(mdrv.cgPathByPOD, pod.Uid)
+	delete(mdrv.cgPathByPodUID, pod.Uid)
 	return nil
 }
 
 func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	lh := mdrv.logrFromContext(ctx)
-	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid)
+	lh = lh.WithName("RemovePodSandbox").WithValues("pod", pod.Namespace+"/"+pod.Name, "podUID", pod.Uid, "podSandboxID", pod.Id)
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
@@ -208,8 +208,8 @@ func (mdrv *MemoryDriver) handleContainer(lh logr.Logger, ctr *api.Container) (c
 }
 
 func (mdrv *MemoryDriver) handlePodSandbox(lh logr.Logger, pod *api.PodSandbox) error {
-	mdrv.cgPathByPOD[pod.Uid] = pod.Linux.CgroupParent
-	lh.V(2).Info("registered pod cgroupParent", "podUID", pod.Uid, "cgroupParent", pod.Linux.CgroupParent)
+	mdrv.cgPathByPodUID[pod.Uid] = pod.Linux.CgroupParent
+	lh.V(2).Info("registered pod cgroup path", "cgroupParent", pod.Linux.CgroupParent)
 	return nil
 }
 
