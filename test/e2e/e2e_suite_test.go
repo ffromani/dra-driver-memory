@@ -17,12 +17,12 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strconv"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	"github.com/onsi/gomega/gcustom"
@@ -31,6 +31,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/ffromani/dra-driver-memory/test/pkg/fixture"
+	"github.com/ffromani/dra-driver-memory/test/pkg/pod"
+	"github.com/ffromani/dra-driver-memory/test/pkg/result"
 )
 
 func TestE2E(t *testing.T) {
@@ -70,16 +72,36 @@ func SkipIfGithubActions() {
 	fixture.Skipf("Github Actions detected: skip flaky/fragile tests")
 }
 
+func ReportReason(fxt *fixture.Fixture, reason result.Reason) types.GomegaMatcher {
+	return gcustom.MakeMatcher(func(actual *corev1.Pod) (bool, error) {
+		if actual == nil {
+			return false, errors.New("nil Pod")
+		}
+		lh := fxt.Log.WithValues("podUID", actual.UID, "namespace", actual.Namespace, "name", actual.Name)
+		ctx := context.TODO()
+		logs, err := pod.GetLogs(fxt.K8SClientset, ctx, actual.Namespace, actual.Name, actual.Spec.Containers[0].Name)
+		if err != nil {
+			return false, err
+		}
+		res, err := result.FromLogs(logs)
+		if err != nil {
+			return false, err
+		}
+		lh.Info("result", "reason", res.Status.Reason, "message", res.Status.Message)
+		return res.Status.Reason == reason, nil
+	}).WithTemplate("Pod {{.Actual.Namespace}}/{{.Actual.Name}} UID {{.Actual.UID}} did not fail with expected reason {{.Data}}").WithTemplateData(reason)
+}
+
 const (
 	reasonOOMKilled = "OOMKilled"
 )
 
-func BeOOMKilled(lh_ logr.Logger) types.GomegaMatcher {
+func BeOOMKilled(fxt *fixture.Fixture) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(actual *corev1.Pod) (bool, error) {
-		lh := lh_.WithValues("podUID", actual.UID, "namespace", actual.Namespace, "name", actual.Name)
 		if actual == nil {
 			return false, errors.New("nil Pod")
 		}
+		lh := fxt.Log.WithValues("podUID", actual.UID, "namespace", actual.Namespace, "name", actual.Name)
 		if actual.Status.Phase != corev1.PodFailed {
 			lh.Info("unexpected phase", "phase", actual.Status.Phase)
 			return false, nil
