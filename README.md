@@ -182,6 +182,23 @@ spec:
 - Best-effort runtime allocation of hugepages
 - Memory QoS settings beyond hugepage limits
 
+## Sharing Resource Claims
+
+This driver strictly enforces a 1-to-1 mapping between Claims and Containers. It does not support sharing a single ResourceClaim among multiple containers or multiple pods.
+
+The rationale is that memory is intrinsically fungible and anonymous. Unlike devices, memory pages do not have persistent physical identities that are meaningful to the user.
+Named memory regions (e.g., System V shared memory, hugetlbfs) are the exception, not the rule, and are typically managed via filesystem permissions rather than resource allocation limits.
+
+This stands in contrast to the DRA CPU Driver or GPU drivers. CPUs and GPUs are discrete resources with distinct physical identities (e.g., Core IDs, PCIe Addresses).
+Sharing a CPU claim maps cleanly to time-slicing access to a specific, named hardware core—a pattern that fits the DRA 'Device' model.
+
+Attempting to 'share' a memory claim implies splitting an abstract budget (quota) rather than granting access to a shared physical device.
+This driver disallows shared claims to strictly maintain the architectural distinction between Device Identity (which DRA manages) and Resource Quotas (which the Kubelet manages).
+
+As initiatives like KEP-5517 (Native Resource Management) progress, the role of DRA drivers may expand to include quota management responsibilities.
+We will re-evaluate this restriction as those APIs mature to support "bulk" allocation requests from the Kubelet.
+
+If you have a use case that requires sharing a memory claim—specifically one that is not solved by existing shared memory volumes (e.g., emptyDir: medium=Memory, /dev/shm, or hugetlbfs mounts)—please file a tracking issue detailing your requirements.
 
 ## Development
 
