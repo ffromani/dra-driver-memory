@@ -49,13 +49,16 @@ build: build-dramemory build-setuphelpers ## build all the binaries
 build-dramemory: ## build dramemory
 	go build -v -o "$(OUT_DIR)/dramemory" ./cmd/dramemory
 
-build-setuphelpers: build-tool-setup-containerd ## build the configuration setup helpers
+build-setuphelpers: build-tool-setup-containerd build-tool-setup-hugepages ## build the configuration setup helpers
 
 build-test-dramemtester: ## build helper to serve as entry point and report memory allocation
 	go build -v -o "$(OUT_DIR)/dramemtester" ./test/image/dramemtester
 
 build-tool-setup-containerd: ## build the containerd configuration setup helper
 	go build -v -o "$(OUT_DIR)/setup-containerd" ./tools/setup/containerd
+
+build-tool-setup-hugepages: ## build the hugepages provision setup helper
+	go build -v -o "$(OUT_DIR)/setup-hugepages" ./tools/setup/hugepages
 
 build-tool-cgroup-inspector: ## build cgroup-inspector tool
 	go build -v -o "$(OUT_DIR)/cgroup-inspector" ./tools/cgroup-inspector

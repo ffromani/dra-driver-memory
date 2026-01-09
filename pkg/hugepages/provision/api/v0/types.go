@@ -1,9 +1,5 @@
 package v0
 
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
 // HugePageSize defines size of huge pages
 // The allowed values for this depend on CPU architecture
 // For x86/amd64, the valid values are 2M and 1G.
@@ -24,9 +20,6 @@ type HugePageProvisionSpec struct {
 
 // HugePageProvisionStatus defines the observed state of Hugepages.
 type HugePageProvisionStatus struct {
-	// Conditions represents the latest available observations of current state.
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // HugePage defines the number of allocated huge pages of the specific size.
@@ -41,27 +34,71 @@ type HugePage struct {
 	Node *int32 `json:"node,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=performanceprofiles,scope=Cluster
-// +kubebuilder:storageversion
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // HugePageProvision is the Schema for the hugepageprovision API
 type HugePageProvision struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	TypeMeta   `json:",inline"`
+	ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   HugePageProvisionSpec   `json:"spec,omitempty"`
 	Status HugePageProvisionStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // HugePageProvisionList contains a list of HugePage
 type HugePageProvisionList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []HugePageProvision `json:"items"`
+	TypeMeta `json:",inline"`
+	Items    []HugePageProvision `json:"items"`
+}
+
+// borrowed types from kube. Once we will move to a real API (if ever) we will
+// just use the standard metav1 k8s packages
+
+type TypeMeta struct {
+	// Kind is a string value representing the REST resource this object represents.
+	// Servers may infer this from the endpoint the client submits requests to.
+	// Cannot be updated.
+	// In CamelCase.
+	Kind string `json:"kind,omitempty" protobuf:"bytes,1,opt,name=kind"`
+
+	// APIVersion defines the versioned schema of this representation of an object.
+	// Servers should convert recognized schemas to the latest internal value, and
+	// may reject unrecognized values.
+	APIVersion string `json:"apiVersion,omitempty" protobuf:"bytes,2,opt,name=apiVersion"`
+}
+
+// ObjectMeta is metadata that all persisted resources must have, which includes all objects
+// users must create.
+type ObjectMeta struct {
+	// Name must be unique within a namespace. Is required when creating resources, although
+	// some resources may allow a client to request the generation of an appropriate name
+	// automatically. Name is primarily intended for creation idempotence and configuration
+	// definition.
+	// Cannot be updated.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names
+	// +optional
+	Name string `json:"name,omitempty" protobuf:"bytes,1,opt,name=name"`
+
+	// Namespace defines the space within which each name must be unique. An empty namespace is
+	// equivalent to the "default" namespace, but "default" is the canonical representation.
+	// Not all objects are required to be scoped to a namespace - the value of this field for
+	// those objects will be empty.
+	//
+	// Must be a DNS_LABEL.
+	// Cannot be updated.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces
+	// +optional
+	Namespace string `json:"namespace,omitempty" protobuf:"bytes,3,opt,name=namespace"`
+
+	// Map of string keys and values that can be used to organize and categorize
+	// (scope and select) objects. May match selectors of replication controllers
+	// and services.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
+	// +optional
+	Labels map[string]string `json:"labels,omitempty" protobuf:"bytes,11,rep,name=labels"`
+
+	// Annotations is an unstructured key value map stored with a resource that may be
+	// set by external tools to store and retrieve arbitrary metadata. They are not
+	// queryable and should be preserved when modifying objects.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,12,rep,name=annotations"`
 }

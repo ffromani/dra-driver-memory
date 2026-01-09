@@ -87,7 +87,7 @@ make ci-kind-teardown
 If the system does not have hugepages pre-allocated, you can provision them at runtime:
 
 ```bash
-./bin/dramemory --hugepages-provision=provision.yaml
+./bin/setup-hugepages provision.yaml
 ```
 
 Example provisioning configuration file (`provision.yaml`):

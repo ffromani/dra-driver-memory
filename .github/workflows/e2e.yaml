@@ -58,7 +58,7 @@ jobs:
     - name: Create setup
       run: make
     - name: Provision 2M hugepages
-      run: sudo ./bin/dramemory -hugepages-provision ./hack/ci/hugepages-2M.yaml
+      run: sudo ./bin/setup-hugepages ./hack/ci/hugepages-2M.yaml
     - name: Hugepages provision feedback check
       run: ./bin/dramemory -inspect summary
     - name: Kind version check
@@ -82,7 +82,7 @@ jobs:
     - name: Create setup
       run: make
     - name: Provision 1G hugepages
-      run: sudo ./bin/dramemory -hugepages-provision ./hack/ci/hugepages-1G.yaml
+      run: sudo ./bin/setup-hugepages ./hack/ci/hugepages-1G.yaml
     - name: Hugepages provision feedback check
       run: ./bin/dramemory -inspect summary
     - name: Kind version check
