@@ -29,10 +29,6 @@ const (
 	ProgramName = "dramemory"
 )
 
-type HugePagesParams struct {
-	RuntimeProvisionConfig string
-}
-
 type Params struct {
 	HostnameOverride string
 	Kubeconfig       string
@@ -44,7 +40,6 @@ type Params struct {
 	DoManifests      bool
 	DoVersion        bool
 	InspectMode      InspectMode
-	HugePages        HugePagesParams
 }
 
 func DefaultParams() Params {
@@ -64,7 +59,6 @@ func (par *Params) InitFlags() {
 	flag.BoolVar(&par.DoValidation, "validate", par.DoValidation, "validate machine properties and exit.")
 	flag.BoolVar(&par.DoManifests, "make-manifests", par.DoManifests, "emit DRA manifests based on hardware discovery.")
 	flag.BoolVar(&par.DoVersion, "version", par.DoVersion, "print program version and exit.")
-	flag.StringVar(&par.HugePages.RuntimeProvisionConfig, "hugepages-provision", par.HugePages.RuntimeProvisionConfig, "provision hugepages at runtime (now) using the config at path (`-` for stdin).")
 	flag.Var(&InspectValue{Mode: &par.InspectMode}, "inspect", "inspect machine properties and exit.")
 }
 

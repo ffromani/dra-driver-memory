@@ -14,28 +14,41 @@
  * limitations under the License.
  */
 
-package command
+package main
 
 import (
-	"github.com/go-logr/logr"
+	"flag"
+	"log"
+	"os"
+
+	"github.com/go-logr/stdr"
 	ghwopt "github.com/jaypipes/ghw/pkg/option"
 	ghwtopology "github.com/jaypipes/ghw/pkg/topology"
 
 	"github.com/ffromani/dra-driver-memory/pkg/hugepages/provision"
 )
 
-func ProvisionHugepages(params Params, setupLogger logr.Logger) error {
-	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(params.SysRoot))
+func main() {
+	var sysRoot string = "/"
+	setupLogger := stdr.New(log.New(os.Stderr, "", log.Lshortfile))
+	flag.StringVar(&sysRoot, "sysfs-root", sysRoot, "root point where sysfs is mounted.")
+	flag.Parse()
+
+	sysinfo, err := ghwtopology.New(ghwopt.WithChroot(sysRoot))
 	if err != nil {
-		return err
+		setupLogger.Error(err, "cannot discover machine topology")
+		os.Exit(1)
 	}
-	config, err := provision.ReadConfiguration(params.HugePages.RuntimeProvisionConfig)
-	if err != nil {
-		return err
+	for _, arg := range flag.Args() {
+		config, err := provision.ReadConfiguration(arg)
+		if err != nil {
+			setupLogger.Error(err, "cannot read hugepages configuration", "path", arg)
+			os.Exit(2)
+		}
+		err = provision.RuntimeHugepages(setupLogger, config, sysRoot, len(sysinfo.Nodes))
+		if err != nil {
+			setupLogger.Error(err, "cannot provision hugepages")
+			os.Exit(4)
+		}
 	}
-	err = provision.RuntimeHugepages(setupLogger, config, params.SysRoot, len(sysinfo.Nodes))
-	if err != nil {
-		return err
-	}
-	return nil
 }

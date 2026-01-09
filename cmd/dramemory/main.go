@@ -80,14 +80,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	if params.HugePages.RuntimeProvisionConfig != "" {
-		if err := command.ProvisionHugepages(params, logger); err != nil {
-			logger.Error(err, "hugepages provisioning failed")
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
 	params.DumpFlags(logger)
 	if err := command.RunDaemon(ctx, params, logger); err != nil {
 		logger.Error(err, "daemon failed")
