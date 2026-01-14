@@ -182,6 +182,37 @@ spec:
 - Best-effort runtime allocation of hugepages
 - Memory QoS settings beyond hugepage limits
 
+## Sharing Resource Claims
+
+This driver strictly enforces a 1-to-1 mapping between Claims and Containers.
+It does not support sharing a single ResourceClaim among multiple containers or multiple pods.
+Because technical limitations, the driver does not errors out correctly in all the cases on
+which a claim sharing is attempted. This is a technical limitation which we aim to improve.
+
+In other words, this driver may fail to disallow claim sharing in your workflow.
+These are bugs; please file tracking issues accordingly.
+
+The rationale to disallow sharing is that memory is intrinsically fungible and anonymous.
+Unlike devices, memory pages do not have persistent physical identities that are meaningful
+to the user. Named memory regions (e.g., System V shared memory, hugetlbfs) are the exception,
+not the rule, and require specific and explicit allocation strategies.
+
+Comparing to other DRA drivers, [CPUs](https://github.com/kubernetes-sigs/dra-driver-cpu) and
+GPUs are discrete resources with distinct physical identities (e.g., Core IDs, PCIe Addresses).
+Sharing a CPU claim maps cleanly to time-slicing access to a specific, named hardware core.
+This usage pattern fits quite closely the DRA 'Device' model.
+
+Because memory is anonymous by default, attempting to 'share' a memory claim means more splitting
+an abstract budget (quota) rather than granting access to a shared physical device.
+Handling quotas is, at the moment (kubernetes 1.35.0), a core kubernetes responsability rather
+than a DRA driver responsability.
+
+As initiatives like KEP-5517 (Native Resource Management) progress, the role of DRA drivers may
+expand to include quota management responsibilities.
+
+If you have a use case that requires sharing a memory claim—specifically one that is not solved
+by existing shared memory volumes (e.g., emptyDir: medium=Memory, /dev/shm, or hugetlbfs mounts)—please
+file a tracking issue detailing your requirements.
 
 ## Development
 
