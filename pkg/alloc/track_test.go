@@ -30,9 +30,9 @@ import (
 )
 
 func TestCreate(t *testing.T) {
-	mgr := NewManager()
-	require.Equal(t, mgr.CountClaims(), 0, "empty allocationManager has claims")
-	require.Equal(t, mgr.CountPods(), 0, "empty allocationManager has pods")
+	trk := NewTracker()
+	require.Equal(t, trk.CountClaims(), 0, "empty allocationTracker has claims")
+	require.Equal(t, trk.CountPods(), 0, "empty allocationTracker has pods")
 }
 
 func TestRegisterUnregister(t *testing.T) {
@@ -46,13 +46,13 @@ func TestRegisterUnregister(t *testing.T) {
 			NUMAZone: 1,
 		},
 	}
-	mgr := NewManager()
-	mgr.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
-	mgr.UnregisterClaim(k8stypes.UID("foobar"))
-	require.Equal(t, mgr.CountClaims(), 0, "empty allocationManager has claims")
-	require.Equal(t, mgr.CountPods(), 0, "empty allocationManager has pods")
+	trk := NewTracker()
+	trk.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
+	trk.UnregisterClaim(k8stypes.UID("foobar"))
+	require.Equal(t, trk.CountClaims(), 0, "empty allocationTracker has claims")
+	require.Equal(t, trk.CountPods(), 0, "empty allocationTracker has pods")
 
-	_, ok := mgr.GetAllocationsForClaim("foobar")
+	_, ok := trk.GetAllocationsForClaim("foobar")
 	require.False(t, ok, "got unregistered claim")
 }
 
@@ -69,15 +69,15 @@ func TestRegisterGetClones(t *testing.T) {
 	}
 	expected := maps.Clone(claimAllocs)
 
-	mgr := NewManager()
-	mgr.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
+	trk := NewTracker()
+	trk.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
 
 	claimAllocs["hugepages-2m"] = types.Allocation{}
 
-	_, ok := mgr.GetAllocationsForClaim("xxx")
+	_, ok := trk.GetAllocationsForClaim("xxx")
 	require.False(t, ok, "found nonexistent claim")
 
-	got, ok := mgr.GetAllocationsForClaim("foobar")
+	got, ok := trk.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "missing expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -96,8 +96,8 @@ func TestRegisterUpdatesExistingData(t *testing.T) {
 		},
 	}
 
-	mgr := NewManager()
-	mgr.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
+	trk := NewTracker()
+	trk.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
 
 	claimAllocs["hugepages-2m"] = types.Allocation{
 		ResourceIdent: types.ResourceIdent{
@@ -107,11 +107,11 @@ func TestRegisterUpdatesExistingData(t *testing.T) {
 		Amount:   16 * 2 * 1024 * 1024,
 		NUMAZone: 1,
 	}
-	mgr.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
+	trk.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
 
 	expected := maps.Clone(claimAllocs)
 
-	got, ok := mgr.GetAllocationsForClaim("foobar")
+	got, ok := trk.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "can't find expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -132,16 +132,16 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 	}
 	expected := maps.Clone(claimAllocs)
 
-	mgr := NewManager()
-	mgr.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
-	require.Equal(t, mgr.CountClaims(), 1)
-	require.Equal(t, mgr.CountPods(), 0)
+	trk := NewTracker()
+	trk.RegisterClaim(k8stypes.UID("foobar"), claimAllocs)
+	require.Equal(t, trk.CountClaims(), 1)
+	require.Equal(t, trk.CountPods(), 0)
 
-	mgr.CleanupPod(lh, "pod-AAA")
-	require.Equal(t, mgr.CountClaims(), 1)
-	require.Equal(t, mgr.CountPods(), 0)
+	trk.CleanupPod(lh, "pod-AAA")
+	require.Equal(t, trk.CountClaims(), 1)
+	require.Equal(t, trk.CountPods(), 0)
 
-	got, ok := mgr.GetAllocationsForClaim("foobar")
+	got, ok := trk.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "can't find expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -150,9 +150,9 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 
 func TestUnregisterByPod(t *testing.T) {
 	lh := testr.New(t)
-	mgr := NewManager()
+	trk := NewTracker()
 
-	mgr.RegisterClaim(k8stypes.UID("foo"), map[string]types.Allocation{
+	trk.RegisterClaim(k8stypes.UID("foo"), map[string]types.Allocation{
 		"memory": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Memory,
@@ -162,9 +162,9 @@ func TestUnregisterByPod(t *testing.T) {
 			NUMAZone: 1,
 		},
 	})
-	mgr.BindClaimToPod(lh, "pod-BBB", k8stypes.UID("foo"))
+	trk.BindClaim(lh, k8stypes.UID("foo"), "pod-SandboxID")
 
-	mgr.RegisterClaim(k8stypes.UID("bar"), map[string]types.Allocation{
+	trk.RegisterClaim(k8stypes.UID("bar"), map[string]types.Allocation{
 		"hugepages-2m": {
 			ResourceIdent: types.ResourceIdent{
 				Kind:     types.Hugepages,
@@ -174,15 +174,15 @@ func TestUnregisterByPod(t *testing.T) {
 			NUMAZone: 1,
 		},
 	})
-	mgr.BindClaimToPod(lh, "pod-BBB", k8stypes.UID("bar"))
+	trk.BindClaim(lh, k8stypes.UID("bar"), "pod-SandboxID")
 
-	mgr.CleanupPod(lh, "pod-BBB")
-	require.Equal(t, mgr.CountClaims(), 0)
-	require.Equal(t, mgr.CountPods(), 0)
+	trk.CleanupPod(lh, "pod-SandboxID")
+	require.Equal(t, trk.CountClaims(), 0)
+	require.Equal(t, trk.CountPods(), 0)
 
 	var ok bool
-	_, ok = mgr.GetAllocationsForClaim("foo")
+	_, ok = trk.GetAllocationsForClaim("foo")
 	require.False(t, ok, "claim should be removed by podId")
-	_, ok = mgr.GetAllocationsForClaim("bar")
+	_, ok = trk.GetAllocationsForClaim("bar")
 	require.False(t, ok, "claim should be removed by podId")
 }
