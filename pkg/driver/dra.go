@@ -78,7 +78,7 @@ func (mdrv *MemoryDriver) PrepareResourceClaims(ctx context.Context, claims []*r
 	}
 
 	for _, claim := range claims {
-		result[claim.UID] = mdrv.prepareResourceClaim(ctx, claim)
+		result[claim.UID] = mdrv.prepareResourceClaim(lh, claim)
 	}
 	return result, nil
 }
@@ -112,15 +112,27 @@ func (mdrv *MemoryDriver) HandleError(ctx context.Context, err error, msg string
 	lh.Error(err, msg)
 }
 
-func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
-	lh, _ := logr.FromContext(ctx)
-	lh = lh.WithName("PrepareResourceClaims").WithValues("claim", objref.KObj(claim))
+func (mdrv *MemoryDriver) prepareResourceClaim(lh logr.Logger, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+	lh = lh.WithValues("claim", claim.String())
 
+	// Get pod info from claim
+	if len(claim.Status.ReservedFor) == 0 {
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("no pod info for claim %s", claim.String()),
+		}
+	}
+	if len(claim.Status.ReservedFor) > 1 {
+		return kubeletplugin.PrepareResult{
+			Err: fmt.Errorf("multiple pods found for claim %s not supported", claim.String()),
+		}
+	}
 	if claim.Status.Allocation == nil {
 		return kubeletplugin.PrepareResult{
 			Err: fmt.Errorf("claim %s has no allocation", claim.String()),
 		}
 	}
+
+	lh.V(4).Info("preparing for owner", "APIGroup", claim.Status.ReservedFor[0].APIGroup, "resource", claim.Status.ReservedFor[0].Resource, "UID", claim.Status.ReservedFor[0].UID)
 
 	deviceName := cdi.MakeDeviceName(claim.UID)
 	qualifiedName := cdiparser.QualifiedName(cdi.Vendor, cdi.Class, deviceName)
@@ -137,7 +149,9 @@ func (mdrv *MemoryDriver) prepareResourceClaim(ctx context.Context, claim *resou
 
 		span, err := mdrv.discoverer.GetSpanForDevice(lh, devRes.Device)
 		if err != nil {
-			return kubeletplugin.PrepareResult{Err: err}
+			return kubeletplugin.PrepareResult{
+				Err: err,
+			}
 		}
 
 		capName := span.CapacityName()
