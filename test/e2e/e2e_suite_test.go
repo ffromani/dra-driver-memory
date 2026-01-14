@@ -93,8 +93,33 @@ func ReportReason(fxt *fixture.Fixture, reason result.Reason) types.GomegaMatche
 }
 
 const (
-	reasonOOMKilled = "OOMKilled"
+	reasonOOMKilled            = "OOMKilled"
+	reasonCreateContainerError = "CreateContainerError"
 )
+
+func BeFailedToCreate(fxt *fixture.Fixture) types.GomegaMatcher {
+	return gcustom.MakeMatcher(func(actual *corev1.Pod) (bool, error) {
+		if actual == nil {
+			return false, errors.New("nil Pod")
+		}
+		lh := fxt.Log.WithValues("podUID", actual.UID, "namespace", actual.Namespace, "name", actual.Name)
+		if actual.Status.Phase != corev1.PodPending {
+			lh.Info("unexpected phase", "phase", actual.Status.Phase)
+			return false, nil
+		}
+		cntSt := findWaitingContainerStatus(actual.Status.ContainerStatuses)
+		if cntSt == nil {
+			lh.Info("no container in waiting state")
+			return false, nil
+		}
+		if cntSt.State.Waiting.Reason != reasonCreateContainerError {
+			lh.Info("container terminated for different reason", "containerName", cntSt.Name, "reason", cntSt.State.Terminated.Reason)
+			return false, nil
+		}
+		lh.Info("container OOMKilled", "containerName", cntSt.Name)
+		return true, nil
+	}).WithTemplate("Pod {{.Actual.Namespace}}/{{.Actual.Name}} UID {{.Actual.UID}} was not in failed phase")
+}
 
 func BeOOMKilled(fxt *fixture.Fixture) types.GomegaMatcher {
 	return gcustom.MakeMatcher(func(actual *corev1.Pod) (bool, error) {
@@ -120,6 +145,15 @@ func BeOOMKilled(fxt *fixture.Fixture) types.GomegaMatcher {
 	}).WithTemplate("Pod {{.Actual.Namespace}}/{{.Actual.Name}} UID {{.Actual.UID}} was not OOMKilled")
 }
 
+func findWaitingContainerStatus(statuses []corev1.ContainerStatus) *corev1.ContainerStatus {
+	for idx := range statuses {
+		cntSt := &statuses[idx]
+		if cntSt.State.Waiting != nil {
+			return cntSt
+		}
+	}
+	return nil
+}
 func findTerminatedContainerStatus(statuses []corev1.ContainerStatus) *corev1.ContainerStatus {
 	for idx := range statuses {
 		cntSt := &statuses[idx]
