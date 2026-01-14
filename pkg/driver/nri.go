@@ -25,6 +25,7 @@ import (
 	"github.com/containerd/nri/pkg/api"
 	"github.com/go-logr/logr"
 
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/cpuset"
 
@@ -47,11 +48,20 @@ func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbo
 	// we recover in reverse (container, then sandbox) because we have a easy way
 	// to detect the containers which we processed, so from these we can find the
 	// relevant sandboxes
-	podSandboxIDs := sets.New[string]()
+	podsBySandboxID := make(map[string]*api.PodSandbox, len(pods))
+	for _, pod := range pods {
+		lh.V(4).Info("reverse map", "podSandboxID", pod.Id, "podUID", pod.Uid)
+		podsBySandboxID[pod.Id] = pod
+	}
+	knownPods := sets.New[string]()
 
 	for _, ctr := range containers {
 		lh_ := lh.WithValues("podSandboxID", ctr.PodSandboxId, "container", ctr.Name, "containerID", ctr.Id)
-		_, _, ok, err := mdrv.handleContainer(lh_, ctr)
+		pod, ok := podsBySandboxID[ctr.PodSandboxId]
+		if !ok {
+			return nil, fmt.Errorf("unknown sandbox: %q for container %q (%q)", ctr.PodSandboxId, ctr.Name, ctr.Id)
+		}
+		_, _, ok, err := mdrv.handleContainer(lh_, pod, ctr)
 		if err != nil {
 			return nil, err
 		}
@@ -59,12 +69,12 @@ func (mdrv *MemoryDriver) Synchronize(ctx context.Context, pods []*api.PodSandbo
 			continue
 		}
 		lh_.V(4).Info("backreferencing")
-		podSandboxIDs.Insert(ctr.PodSandboxId)
+		knownPods.Insert(ctr.PodSandboxId)
 	}
 
 	for _, pod := range pods {
 		lh_ := lh.WithValues("podSandboxID", pod.Id, "podUID", pod.Uid, "pod", pod.Namespace+"/"+pod.Name)
-		if !podSandboxIDs.Has(pod.Id) {
+		if !knownPods.Has(pod.Id) {
 			continue
 		}
 		lh_.V(4).Info("backreferenced pod")
@@ -84,8 +94,9 @@ func (mdrv *MemoryDriver) CreateContainer(ctx context.Context, pod *api.PodSandb
 	defer lh.V(4).Info("done")
 
 	lh.V(4).Info("container backref", "sandboxID", ctr.PodSandboxId)
-	numaNodes, allocs, ok, err := mdrv.handleContainer(lh, ctr)
+	numaNodes, allocs, ok, err := mdrv.handleContainer(lh, pod, ctr)
 	if err != nil {
+		lh.Error(err, "cannot create container")
 		return nil, nil, err
 	}
 	var updates []*api.ContainerUpdate
@@ -177,11 +188,12 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	mdrv.allocMgr.UnregisterClaimsForPod(lh, pod.Id)
+	claimUIDs := mdrv.allocMgr.CleanupPod(lh, pod.Id)
+	mdrv.bindMgr.Cleanup(lh, claimUIDs...)
 	return nil
 }
 
-func (mdrv *MemoryDriver) handleContainer(lh logr.Logger, ctr *api.Container) (cpuset.CPUSet, []types.Allocation, bool, error) {
+func (mdrv *MemoryDriver) handleContainer(lh logr.Logger, pod *api.PodSandbox, ctr *api.Container) (cpuset.CPUSet, []types.Allocation, bool, error) {
 	nodesByClaim, allocsByClaim, err := env.ExtractAll(lh, ctr.Env, mdrv.discoverer.AllResourceNames())
 	if err != nil {
 		return cpuset.CPUSet{}, nil, false, err
@@ -193,15 +205,25 @@ func (mdrv *MemoryDriver) handleContainer(lh logr.Logger, ctr *api.Container) (c
 
 	lh.V(4).Info("extracted", "nodesByClaim", len(nodesByClaim), "allocsByClaim", len(allocsByClaim))
 
+	claimUIDs := sets.New[k8stypes.UID]()
 	var numaNodes cpuset.CPUSet
+	var allocs []types.Allocation
+
 	for claimUID, claimNUMANodes := range nodesByClaim {
 		numaNodes = numaNodes.Union(claimNUMANodes)
-		mdrv.allocMgr.BindClaimToPod(lh, ctr.PodSandboxId, claimUID)
+		claimUIDs.Insert(claimUID)
 	}
-	var allocs []types.Allocation
 	for claimUID, alloc := range allocsByClaim {
 		allocs = append(allocs, alloc)
-		mdrv.allocMgr.BindClaimToPod(lh, ctr.PodSandboxId, claimUID)
+		claimUIDs.Insert(claimUID)
+	}
+
+	for _, claimUID := range claimUIDs.UnsortedList() {
+		mdrv.allocMgr.BindClaim(lh, claimUID, ctr.PodSandboxId)
+		err := mdrv.bindMgr.SetOwner(lh, claimUID, pod.Uid, ctr.Name)
+		if err != nil {
+			return cpuset.CPUSet{}, nil, false, err
+		}
 	}
 
 	return numaNodes, allocs, true, nil

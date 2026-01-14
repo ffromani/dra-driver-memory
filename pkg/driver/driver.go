@@ -66,7 +66,8 @@ type MemoryDriver struct {
 	draPlugin      KubeletPlugin
 	nriPlugin      stub.Stub
 	cdiMgr         *cdi.Manager
-	allocMgr       *alloc.Manager
+	allocMgr       *alloc.Tracker
+	bindMgr        *alloc.Binder
 	discoverer     *sysinfo.Discoverer
 	hpRootLimits   []hugepages.Limit
 	cgPathByPodUID map[string]string // podUID -> cgroupParent
@@ -103,7 +104,8 @@ func Start(ctx context.Context, env Environment) (*MemoryDriver, error) {
 		cgMount:        env.CgroupMount,
 		kubeClient:     env.Clientset,
 		logger:         env.Logger.WithName(env.DriverName),
-		allocMgr:       alloc.NewManager(),
+		allocMgr:       alloc.NewTracker(),
+		bindMgr:        alloc.NewBinder(),
 		discoverer:     sysinfo.NewDiscoverer(env.SysRoot),
 		cgPathByPodUID: make(map[string]string),
 	}
