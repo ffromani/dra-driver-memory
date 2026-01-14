@@ -29,14 +29,14 @@ import (
 
 type Manager struct {
 	// claim -> resourceType (can be `hugepages-1g`) -> allocation
-	claimedResources map[k8stypes.UID]map[string]types.Allocation
-	claimsByPodId    map[string]sets.Set[k8stypes.UID]
+	claimedResources     map[k8stypes.UID]map[string]types.Allocation
+	claimsByPodSandboxID map[string]sets.Set[k8stypes.UID]
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		claimedResources: make(map[k8stypes.UID]map[string]types.Allocation),
-		claimsByPodId:    make(map[string]sets.Set[k8stypes.UID]),
+		claimedResources:     make(map[k8stypes.UID]map[string]types.Allocation),
+		claimsByPodSandboxID: make(map[string]sets.Set[k8stypes.UID]),
 	}
 }
 
@@ -64,31 +64,31 @@ func (mgr *Manager) GetClaim(claimUID k8stypes.UID) (map[string]types.Allocation
 	return maps.Clone(allocs), true
 }
 
-func (mgr *Manager) BindClaimToPod(lh logr.Logger, podId string, claimUID k8stypes.UID) {
-	claimUIDs, ok := mgr.claimsByPodId[podId]
+func (mgr *Manager) BindClaimToPod(lh logr.Logger, podSandboxID string, claimUID k8stypes.UID) {
+	claimUIDs, ok := mgr.claimsByPodSandboxID[podSandboxID]
 	if !ok {
-		lh.V(4).Info("claim bound", "podSandboxID", podId, "claimUID", claimUID)
-		mgr.claimsByPodId[podId] = sets.New(claimUID)
+		lh.V(4).Info("claim bound", "podSandboxID", podSandboxID, "claimUID", claimUID)
+		mgr.claimsByPodSandboxID[podSandboxID] = sets.New(claimUID)
 		return
 	}
 	if claimUIDs.Has(claimUID) {
 		return // minimize work and logging
 	}
 	claimUIDs.Insert(claimUID)
-	mgr.claimsByPodId[podId] = claimUIDs
-	lh.V(4).Info("claim bound", "podSandboxID", podId, "claimUID", claimUID)
+	mgr.claimsByPodSandboxID[podSandboxID] = claimUIDs
+	lh.V(4).Info("claim bound", "podSandboxID", podSandboxID, "claimUID", claimUID)
 }
 
-func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podId string) {
-	claimUIDs, ok := mgr.claimsByPodId[podId]
+func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podSandboxID string) {
+	claimUIDs, ok := mgr.claimsByPodSandboxID[podSandboxID]
 	if !ok {
 		return
 	}
-	lh.V(4).Info("unbinding claims", "podSandboxID", podId, "claimsCount", claimUIDs.Len())
+	lh.V(4).Info("unbinding claims", "podSandboxID", podSandboxID, "claimsCount", claimUIDs.Len())
 	for _, claimUID := range claimUIDs.UnsortedList() {
 		mgr.UnregisterClaim(claimUID)
 	}
-	delete(mgr.claimsByPodId, podId)
+	delete(mgr.claimsByPodSandboxID, podSandboxID)
 }
 
 func (mgr *Manager) CountClaims() int {
@@ -96,5 +96,5 @@ func (mgr *Manager) CountClaims() int {
 }
 
 func (mgr *Manager) CountPods() int {
-	return len(mgr.claimsByPodId)
+	return len(mgr.claimsByPodSandboxID)
 }
