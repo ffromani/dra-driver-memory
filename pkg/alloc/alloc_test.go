@@ -137,7 +137,7 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 	require.Equal(t, mgr.CountClaims(), 1)
 	require.Equal(t, mgr.CountPods(), 0)
 
-	mgr.UnregisterClaimsForPod(lh, "pod-AAA")
+	mgr.CleanupPod(lh, "pod-AAA")
 	require.Equal(t, mgr.CountClaims(), 1)
 	require.Equal(t, mgr.CountPods(), 0)
 
@@ -176,7 +176,7 @@ func TestUnregisterByPod(t *testing.T) {
 	})
 	mgr.BindClaimToPod(lh, "pod-BBB", k8stypes.UID("bar"))
 
-	mgr.UnregisterClaimsForPod(lh, "pod-BBB")
+	mgr.CleanupPod(lh, "pod-BBB")
 	require.Equal(t, mgr.CountClaims(), 0)
 	require.Equal(t, mgr.CountPods(), 0)
 

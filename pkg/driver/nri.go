@@ -177,7 +177,7 @@ func (mdrv *MemoryDriver) RemovePodSandbox(ctx context.Context, pod *api.PodSand
 	lh.V(4).Info("start")
 	defer lh.V(4).Info("done")
 
-	mdrv.allocMgr.UnregisterClaimsForPod(lh, pod.Id)
+	mdrv.allocMgr.CleanupPod(lh, pod.Id)
 	return nil
 }
 

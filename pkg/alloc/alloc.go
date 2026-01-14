@@ -79,7 +79,7 @@ func (mgr *Manager) BindClaimToPod(lh logr.Logger, podSandboxID string, claimUID
 	lh.V(4).Info("claim bound", "podSandboxID", podSandboxID, "claimUID", claimUID)
 }
 
-func (mgr *Manager) UnregisterClaimsForPod(lh logr.Logger, podSandboxID string) {
+func (mgr *Manager) CleanupPod(lh logr.Logger, podSandboxID string) {
 	claimUIDs, ok := mgr.claimsByPodSandboxID[podSandboxID]
 	if !ok {
 		return
