@@ -29,35 +29,35 @@ import (
 
 type Manager struct {
 	// claim -> resourceType (can be `hugepages-1g`) -> allocation
-	claimedResources     map[k8stypes.UID]map[string]types.Allocation
-	claimsByPodSandboxID map[string]sets.Set[k8stypes.UID]
+	allocationsByClaimUID map[k8stypes.UID]map[string]types.Allocation
+	claimsByPodSandboxID  map[string]sets.Set[k8stypes.UID]
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		claimedResources:     make(map[k8stypes.UID]map[string]types.Allocation),
-		claimsByPodSandboxID: make(map[string]sets.Set[k8stypes.UID]),
+		allocationsByClaimUID: make(map[k8stypes.UID]map[string]types.Allocation),
+		claimsByPodSandboxID:  make(map[string]sets.Set[k8stypes.UID]),
 	}
 }
 
 func (mgr *Manager) RegisterClaim(claimUID k8stypes.UID, claimAllocs map[string]types.Allocation) {
-	alloc, ok := mgr.claimedResources[claimUID]
+	alloc, ok := mgr.allocationsByClaimUID[claimUID]
 	if !ok {
-		mgr.claimedResources[claimUID] = maps.Clone(claimAllocs)
+		mgr.allocationsByClaimUID[claimUID] = maps.Clone(claimAllocs)
 		return
 	}
 	for key, val := range claimAllocs {
 		alloc[key] = val
 	}
-	mgr.claimedResources[claimUID] = alloc
+	mgr.allocationsByClaimUID[claimUID] = alloc
 }
 
 func (mgr *Manager) UnregisterClaim(claimUID k8stypes.UID) {
-	delete(mgr.claimedResources, claimUID)
+	delete(mgr.allocationsByClaimUID, claimUID)
 }
 
-func (mgr *Manager) GetClaim(claimUID k8stypes.UID) (map[string]types.Allocation, bool) {
-	allocs, ok := mgr.claimedResources[claimUID]
+func (mgr *Manager) GetAllocationsForClaim(claimUID k8stypes.UID) (map[string]types.Allocation, bool) {
+	allocs, ok := mgr.allocationsByClaimUID[claimUID]
 	if !ok {
 		return nil, false
 	}
@@ -92,7 +92,7 @@ func (mgr *Manager) CleanupPod(lh logr.Logger, podSandboxID string) {
 }
 
 func (mgr *Manager) CountClaims() int {
-	return len(mgr.claimedResources)
+	return len(mgr.allocationsByClaimUID)
 }
 
 func (mgr *Manager) CountPods() int {

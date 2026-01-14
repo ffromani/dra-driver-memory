@@ -52,7 +52,7 @@ func TestRegisterUnregister(t *testing.T) {
 	require.Equal(t, mgr.CountClaims(), 0, "empty allocationManager has claims")
 	require.Equal(t, mgr.CountPods(), 0, "empty allocationManager has pods")
 
-	_, ok := mgr.GetClaim("foobar")
+	_, ok := mgr.GetAllocationsForClaim("foobar")
 	require.False(t, ok, "got unregistered claim")
 }
 
@@ -74,10 +74,10 @@ func TestRegisterGetClones(t *testing.T) {
 
 	claimAllocs["hugepages-2m"] = types.Allocation{}
 
-	_, ok := mgr.GetClaim("xxx")
+	_, ok := mgr.GetAllocationsForClaim("xxx")
 	require.False(t, ok, "found nonexistent claim")
 
-	got, ok := mgr.GetClaim("foobar")
+	got, ok := mgr.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "missing expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -111,7 +111,7 @@ func TestRegisterUpdatesExistingData(t *testing.T) {
 
 	expected := maps.Clone(claimAllocs)
 
-	got, ok := mgr.GetClaim("foobar")
+	got, ok := mgr.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "can't find expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -141,7 +141,7 @@ func TestCannotDeleteIfUnbounded(t *testing.T) {
 	require.Equal(t, mgr.CountClaims(), 1)
 	require.Equal(t, mgr.CountPods(), 0)
 
-	got, ok := mgr.GetClaim("foobar")
+	got, ok := mgr.GetAllocationsForClaim("foobar")
 	require.True(t, ok, "can't find expected claim")
 	if diff := cmp.Diff(got, expected); diff != "" {
 		t.Fatalf("unexpected diff: %s", diff)
@@ -181,8 +181,8 @@ func TestUnregisterByPod(t *testing.T) {
 	require.Equal(t, mgr.CountPods(), 0)
 
 	var ok bool
-	_, ok = mgr.GetClaim("foo")
+	_, ok = mgr.GetAllocationsForClaim("foo")
 	require.False(t, ok, "claim should be removed by podId")
-	_, ok = mgr.GetClaim("bar")
+	_, ok = mgr.GetAllocationsForClaim("bar")
 	require.False(t, ok, "claim should be removed by podId")
 }
