@@ -166,6 +166,11 @@ spec:
               size: 512Mi
 ```
 
+### Container images
+
+With the caveat that running this driver requires custom node *and* containerd configuration,
+prebuilt container images are available on [quay.io](https://quay.io/repository/fromani/dra-driver-memory).
+
 ## Feature Support
 
 ### Currently Supported
