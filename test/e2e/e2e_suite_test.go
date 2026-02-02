@@ -116,7 +116,7 @@ func BeFailedToCreate(fxt *fixture.Fixture) types.GomegaMatcher {
 			lh.Info("container terminated for different reason", "containerName", cntSt.Name, "reason", cntSt.State.Terminated.Reason)
 			return false, nil
 		}
-		lh.Info("container OOMKilled", "containerName", cntSt.Name)
+		lh.Info("container creation error", "containerName", cntSt.Name)
 		return true, nil
 	}).WithTemplate("Pod {{.Actual.Namespace}}/{{.Actual.Name}} UID {{.Actual.UID}} was not in failed phase")
 }
@@ -154,6 +154,7 @@ func findWaitingContainerStatus(statuses []corev1.ContainerStatus) *corev1.Conta
 	}
 	return nil
 }
+
 func findTerminatedContainerStatus(statuses []corev1.ContainerStatus) *corev1.ContainerStatus {
 	for idx := range statuses {
 		cntSt := &statuses[idx]
