@@ -34,8 +34,8 @@ import (
 	nodeutil "k8s.io/component-helpers/node/util"
 	"k8s.io/klog/v2/textlogger"
 
-	"github.com/ffromani/dra-driver-memory/internal/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/driver"
+	"github.com/ffromani/dra-driver-memory/pkg/kloglevel"
 	"github.com/ffromani/dra-driver-memory/pkg/sysinfo"
 )
 

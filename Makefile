@@ -67,10 +67,10 @@ clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
 test-unit-pkg: ## run tests for the main library code
-	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|internal|pkg/driver|test|tools' )
+	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|pkg/driver|test|tools' )
 
 test-unit: ## run tests for all the library code, including internal
-	go test -coverprofile=coverage.out ./pkg/... ./internal/... ./test/pkg/...
+	go test -coverprofile=coverage.out ./pkg/... ./test/pkg/...
 
 test-e2e-base: ## run core E2E tests
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='tier0'
@@ -96,7 +96,7 @@ $(OUT_DIR):  ## creates the output directory (used internally)
 
 .PHONY: vet
 vet:  ## vet the source code tree
-	go vet ./pkg/... ./internal/... ./cmd/...
+	go vet ./pkg/... ./cmd/...
 
 lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...

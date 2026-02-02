@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-logr/stdr"
 
-	"github.com/ffromani/dra-driver-memory/internal/command"
+	"github.com/ffromani/dra-driver-memory/pkg/command"
 )
 
 func main() {
