@@ -21,12 +21,21 @@ import (
 	"io"
 	"os"
 
+	_ "embed"
+
 	"github.com/pelletier/go-toml/v2"
 )
 
 const (
 	ConfigNameStdio string = "-"
 )
+
+//go:embed setup-runtime.sh.tmpl
+var setupScript string
+
+func SetupScript() string {
+	return setupScript
+}
 
 func Config(configName string) error {
 	if configName == ConfigNameStdio {
