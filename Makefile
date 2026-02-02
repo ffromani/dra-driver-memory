@@ -42,20 +42,21 @@ SHELL = /usr/bin/env bash -o pipefail
 default: build ## Default builds
 
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-27s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-36s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 build: build-dramemory build-setuphelpers ## build all the binaries
 
 build-dramemory: ## build dramemory
 	go build -v -o "$(OUT_DIR)/dramemory" ./cmd/dramemory
 
-build-setuphelpers: build-tool-setup-containerd build-tool-setup-hugepages ## build the configuration setup helpers
+build-setuphelpers: build-tool-setup-runtime-containerd build-tool-setup-hugepages ## build the configuration setup helpers
+	$(OUT_DIR)/setup-runtime-containerd -script > "$(OUT_DIR)/setup-runtime" && chmod 0755 "$(OUT_DIR)/setup-runtime"
 
 build-test-dramemtester: ## build helper to serve as entry point and report memory allocation
 	go build -v -o "$(OUT_DIR)/dramemtester" ./test/image/dramemtester
 
-build-tool-setup-containerd: ## build the containerd configuration setup helper
-	go build -v -o "$(OUT_DIR)/setup-containerd" ./tools/setup/containerd
+build-tool-setup-runtime-containerd: ## build the containerd configuration setup helper
+	go build -v -o "$(OUT_DIR)/setup-runtime-containerd" ./tools/setup/containerd
 
 build-tool-setup-hugepages: ## build the hugepages provision setup helper
 	go build -v -o "$(OUT_DIR)/setup-hugepages" ./tools/setup/hugepages
@@ -100,7 +101,7 @@ vet:  ## vet the source code tree
 
 lint:  dep-install-golangci-lint dep-install-shellcheck ## run the linter against the codebase
 	$(GOLANGCI_LINT) run ./...
-	$(SHELLCHECK) ./tools/setup/setup.sh
+	$(SHELLCHECK) ./pkg/setup/containerd/setup-runtime.sh.tmpl
 
 # get image name from directory we're building
 CLUSTER_NAME=dra-driver-memory

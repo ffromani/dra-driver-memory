@@ -28,8 +28,8 @@ RUN make build
 # copy binary onto base image
 FROM busybox:1.36.1-glibc
 COPY --from=builder --chown=root:root /go/src/drv/bin/dramemory /bin/dramemory
-COPY --from=builder --chown=root:root /go/src/drv/bin/setup-containerd /bin/setup-containerd
+COPY --from=builder --chown=root:root /go/src/drv/bin/setup-runtime-containerd /bin/setup-runtime-containerd
 COPY --from=builder --chown=root:root /go/src/drv/bin/setup-hugepages /bin/setup-hugepages
-COPY --from=builder --chown=root:root /go/src/drv/tools/setup/setup.sh /bin/setup.sh
+COPY --from=builder --chown=root:root /go/src/drv/bin/setup-runtime /bin/setup-runtime
 COPY --from=builder --chown=root:root /go/src/drv/hack/drameminfo /bin/drameminfo
 CMD ["/bin/dramemory"]

@@ -114,7 +114,7 @@ spec:
           securityContext:
             privileged: true
           command:
-            - /bin/setup.sh
+            - /bin/setup-runtime
       containers:
         - name: dramemory
           command:

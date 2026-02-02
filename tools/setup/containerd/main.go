@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -27,8 +28,15 @@ import (
 )
 
 func main() {
+	var emitScript bool
 	setupLogger := stdr.New(log.New(os.Stderr, "", log.Lshortfile))
+	flag.BoolVar(&emitScript, "script", emitScript, "emit setup script entrypoint and exit.")
 	flag.Parse()
+
+	if emitScript {
+		fmt.Printf("%s", containerd.SetupScript())
+		os.Exit(0)
+	}
 	if flag.NArg() != 1 {
 		setupLogger.Error(nil, "error: you need to supply /path/to/conf.toml. Use `-` to read from stdin and write to stdout")
 		flag.Usage()
