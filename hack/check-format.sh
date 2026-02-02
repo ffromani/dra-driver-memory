@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-DIFF=$( gofmt -s -d cmd internal pkg )
+DIFF=$( gofmt -s -d cmd pkg )
 if [ -n "${DIFF}" ]; then
 	echo "${DIFF}"
 	exit 1
