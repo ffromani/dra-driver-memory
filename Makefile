@@ -39,10 +39,14 @@ export GOROOT GO111MODULE CGO_ENABLED
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+##@ general
+
 default: build ## Default builds
 
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-36s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ binaries
 
 build: build-dramemory build-setuphelpers ## build all the binaries
 
@@ -67,6 +71,8 @@ build-tool-cgroup-inspector: ## build cgroup-inspector tool
 clean: ## clean
 	rm -rf "$(OUT_DIR)/"
 
+##@ testing
+
 test-unit-pkg: ## run tests for the main library code
 	go test -coverprofile=coverage.out $$( go list ./... | grep -vE 'cmd|config|pkg/driver|test|tools' )
 
@@ -88,6 +94,8 @@ test-e2e-kind-hp2m: ## run core E2E tests suitable to run on a kind cluster pert
 test-e2e-kind-hp1g: ## run core E2E tests suitable to run on a kind cluster pertaining 1G hugepages allocation
 	# TODO: add tier filtering
 	env DRAMEM_E2E_TEST_IMAGE=$(IMAGE_TEST) go test -v ./test/e2e/ --ginkgo.v --ginkgo.label-filter='platform:kind && hugepages:1G'
+
+##@ maintenance
 
 update: ## runs go mod tidy
 	go mod tidy
@@ -129,6 +137,8 @@ PLATFORMS?=linux/amd64
 
 CONTAINER_ENGINE?=docker
 
+##@ container images
+
 build-image: ## build image
 	${CONTAINER_ENGINE} build . \
 		--platform="${PLATFORMS}" \
@@ -143,11 +153,12 @@ build-test-image: ## build tests image
 		--tag="${IMAGE_TEST}" \
 		--load
 
-
 # no need to push the test image
 # never push the CI image! it intentionally refers to a non-existing registry
 push-image: build-image ## build and push image
 	${CONTAINER_ENGINE} push ${IMAGE}
+
+##@ kind cluster management
 
 kind-cluster:  ## create kind cluster
 	kind create cluster --name ${CLUSTER_NAME} --config hack/kind.yaml
@@ -167,7 +178,9 @@ ci-kind-teardown:  ## teardown a CI cluster
 	kind delete cluster --name ${CLUSTER_NAME}
 
 $(GOLANGCI_LINT): dep-install-golangci-lint
-$(SHELLCHECK): dep-insatall-shellcheck
+$(SHELLCHECK): dep-install-shellcheck
+
+##@ manifests
 
 ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install manifests
 	@cd hack/ci && ../../bin/yq e -s '(.kind | downcase) + "-" + .metadata.name + ".part.yaml"' ../../hack/ci/install.tmpl.yaml
@@ -188,13 +201,14 @@ ci-manifests: hack/ci/install.tmpl.yaml dep-install-yq ## create the CI install 
 		> hack/ci/install-ci.yaml
 	@rm hack/ci/*.part.yaml
 
-# dependencies
+##@ dependencies
+
 .PHONY:
 dep-install-yq: ## make sure the yq tool is available locally
 	@# TODO: generalize platform/os?
 	@if [ ! -f bin/yq ]; then\
 	       mkdir -p bin;\
-	       curl -L https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_linux_amd64 -o bin/yq;\
+	       curl -L https://github.com/mikefarah/yq/releases/download/v$(YQ_VERSION)/yq_$(OS)_$(ARCH) -o bin/yq;\
                chmod 0755 bin/yq;\
 	fi
 
@@ -212,7 +226,7 @@ dep-install-golangci-lint: $(OUT_DIR)  ## Download golangci-lint locally if nece
 		}; \
 	} || true
 
-.PHONY: dep-install-shekkcheck
+.PHONY: dep-install-shellcheck
 dep-install-shellcheck: $(OUT_DIR)  ## Download shellcheck locally if necessary, or reuse the system binary
 	@[ ! -f $(OUT_DIR)/shellcheck ] && { \
 		command -v shellcheck >/dev/null 2>&1 && {\
