@@ -46,7 +46,7 @@ Each memory device exposes the following attributes:
 | `resource.kubernetes.io/hugeTLB` | bool | Whether this is a hugepage resource |
 
 Compatibility attributes for other DRA drivers are also exposed:
-- `dra.cpu/numaNode` - for dra-driver-cpu
+- `dra.cpu/numaNodeID` - for dra-driver-cpu
 - `dra.net/numaNode` - for dranet
 
 **The attribute naming format is not final** and subjected to change.

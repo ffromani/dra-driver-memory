@@ -46,8 +46,8 @@ func MakeAttributes(sp types.Span) map[resourceapi.QualifiedName]resourceapi.Dev
 		StandardDeviceAttributePrefix + "pageSize": {StringValue: ptr.To(sp.PagesizeString())},
 		StandardDeviceAttributePrefix + "hugeTLB":  {BoolValue: ptr.To(sp.NeedsHugeTLB())},
 		// compatibility attributes
-		"dra.cpu/numaNode": {IntValue: pNode}, // dra-driver-cpu
-		"dra.net/numaNode": {IntValue: pNode}, // dranet
+		"dra.cpu/numaNodeID": {IntValue: pNode}, // dra-driver-cpu
+		"dra.net/numaNode":   {IntValue: pNode}, // dranet
 	}
 }
 
